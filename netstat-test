@@ -1,0 +1,60 @@
+#!/usr/bin/python3
+
+import unittest
+from netstat import *
+
+# Open debug output file
+debug_output = None
+#debug_output_file_name = "./debug-output.txt"
+debug_output_file_name = None
+if not debug_output_file_name is None:
+    debug_output = open(debug_output_file_name, 'w')
+
+def log(cls, message):
+    if not debug_output is None:
+        debug_output.write(message)
+        debug_output.write('\n')
+        debug_output.flush()
+
+class TestSocketInfo(unittest.TestCase):
+    def test_parsing_hex2dec(self):
+        self.assertEqual(SocketInfo._hex2dec("0"), "0")
+        self.assertRaises(ValueError, SocketInfo._hex2dec, "")
+        self.assertEqual(SocketInfo._hex2dec("FF"), "255")
+        self.assertRaises(ValueError, SocketInfo._hex2dec, "FFz")
+        self.assertEqual(SocketInfo._hex2dec("abcdef1234"), "737894404660")
+
+    def test_parsing_ip(self):
+        self.assertEqual(SocketInfo._ip("FFFFFFFF"), "255.255.255.255")
+        self.assertRaises(ValueError, SocketInfo._ip, "0")
+        self.assertEqual(SocketInfo._ip("293DA8DF"), "223.168.61.41")
+
+    def test_parsing_ip_port(self):
+        self.assertEqual(SocketInfo._convert_ip_port("293DA8DF:0050"), ("223.168.61.41", "80"))
+
+    def test_parsing_is_ip_addr_private(self):
+        self.assertEqual(SocketInfo._is_ip_addr_private("127.0.0.1"), True)
+        self.assertEqual(SocketInfo._is_ip_addr_private("172.27.0.30"), True)
+        self.assertEqual(SocketInfo._is_ip_addr_private("74.125.224.194"), False)
+
+    def test_construct(self):
+        """
+        sl   local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode ref pointer drops             
+        268: 0100007F:0035 00000000:0000 07 00000000:00000000 00:00000000 00000000     0        0 139165 2 0000000000000000 0        
+        """
+        line = "268: 0100007F:0035 00000000:0000 07 00000000:00000000 00:00000000 00000000     0        0 139165 2 0000000000000000 0"
+        info = SocketInfo("tcp", line)
+        self.assertEqual(info.state, "CLOSE")
+        self.assertEqual(info.local_host, "127.0.0.1")
+        self.assertEqual(info.local_port, "53")
+        self.assertEqual(info.fingerprint, "tcp 268 139165")
+
+    def setUp(self): pass
+
+def main():
+    suite = unittest.TestLoader().loadTestsFromTestCase(TestSocketInfo)
+    unittest.TextTestRunner(verbosity=3).run(suite)
+
+if __name__ == '__main__':
+    main()
+
