@@ -21,3 +21,8 @@ with the interval argument passed to the Monitor() constructor, in netstat-monit
 values will make it less likely netstat-monitor will miss a connection, but will increase
 CPU load.
 
+netstat-monitor was developed and tested with:
+Ubuntu 12.04
+Kernel 3.2.0-29
+Python 3.2
+
