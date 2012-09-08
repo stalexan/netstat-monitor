@@ -26,7 +26,6 @@ Monitor -- Collects netstat snapshots at regular intervals.
 SocketInfo -- Information about a particular connection.
 SocketFilter -- Base class for filters, to filter the set of connections reported by Monitor.
 GenericFilter -- Filters on properties of SocketInfo.
-NoPidFilter -- Filters out SocketInfo instances that don't have a pid.
 
 Variables:
 
@@ -44,6 +43,7 @@ import os
 import re
 import glob
 import socket
+import errno
 
 MONITOR_INTERVAL =    1 # Number of seconds between each netstat.
 CLEAN_INTERVAL =     60 # Number of minutes "seen" list grows before being cleaned out.
@@ -79,10 +79,10 @@ class SocketInfo():
     socket_id -- The kernel hash slot for the socket.
     inode -- The inode for the socket.
     fingerprint -- A fingerprint, or hash value, for the SocketInfo.
+    uid -- Unique id for this socket. 
     state -- The socket state; e.g. SYN_SENT, ESTABLISHED, etc.
     time -- When SocketInfo was created.
-    reported -- Whether the SocketInfo was reported by Monitor. A SocketInfo is reported only
-      if it's not filtered out by a SocketFilter.
+    last_seen -- When this SocketInfo was last seen.
     local_host -- Connection local IP address.
     local_port -- Connection local port.
     remote_host -- Connection remote IP address.
@@ -103,7 +103,9 @@ class SocketInfo():
         '^192.168.\d{1,3}$',
         '172.(1[6-9]|2[0-9]|3[0-1]).[0-9]{1,3}.[0-9]{1,3}$']]
 
-    def __init__(self, socket_type, line, monitor=None):
+    _next_uid = 1
+
+    def __init__(self, socket_type, line):
         """Create a SocketInfo of type socket_type from line.
 
         Keyword arguments:
@@ -121,42 +123,52 @@ class SocketInfo():
         self.inode = self._line_array[9]
         self.fingerprint = '{0} {1} {2}'.format(self.socket_type, self.socket_id, self.inode)
 
+    def finish_initializing(self):
+        """Finish initializing. Only needed if this SocketInfo will be kept."""
+
+        # Default UID. Assign later if SocketInfo is reported to user.
+        self.uid = 0
+
         # State
         self.state = SocketInfo._state_mappings[self._line_array[3]]
 
         # Time
         self.time = datetime.datetime.now();
 
-        self.reported = False
+        # User ID
+        self._user_id = self._line_array[7]
 
-        # Already seen? Rest of lookup not needed if so.
-        if not monitor is None:
-            self.has_been_seen = monitor.has_been_seen(self)
-        else:
-            self.has_been_seen = False
+        # Addresses
+        self.local_host,self.local_port = SocketInfo._convert_ip_port(self._line_array[1])
+        self.remote_host,self.remote_port = SocketInfo._convert_ip_port(self._line_array[2]) 
 
-        if not self.has_been_seen:
-            # Mark seen
-            if not monitor is None:
-                monitor.mark_seen(self)
+        # Save rest of lookup for "lookup" methods, since expensive and info
+        # may not be needed if filtered out.
+        self._user = None
+        self._pid = None
+        self._pid_looked_up = False
+        self._exe = None
+        self._cmdline = None
+        self._remote_host_name = None
 
-            # Addresses
-            self.local_host,self.local_port = SocketInfo._convert_ip_port(self._line_array[1])
-            self.remote_host,self.remote_port = SocketInfo._convert_ip_port(self._line_array[2]) 
+    def has_been_reported(self):
+        """Return True if this socket has been reported to user."""
+        reported = self.uid != 0
+        return reported
 
-            # Save rest of lookup for "lookup" methods, since expensive and info
-            # may not be needed if filtered out.
-            self._user = None
-            self._pid = None
-            self._pid_looked_up = False
-            self._exe = None
-            self._cmdline = None
-            self._remote_host_name = None
+    def assign_uid(self):
+        if self.uid == 0:
+            self.uid = SocketInfo._next_uid
+            SocketInfo._next_uid += 1
+
+    def pid_was_found(self):
+        found = self._pid_looked_up and not self._pid is None
+        return found
 
     def lookup_user(self):
         """Lookup user name from uid."""
         if self._user is None:
-            self._user = pwd.getpwuid(int(self._line_array[7]))[0] # A bit expensive.
+            self._user = pwd.getpwuid(int(self._user_id))[0] # A bit expensive.
             self._user = self._user.strip()
         return self._user
 
@@ -168,7 +180,7 @@ class SocketInfo():
                 self._pid = self._pid.strip()
             self._pid_looked_up = True
         return self._pid
-
+    
     def lookup_exe(self):
         """Lookup exe from pid."""
         if self._exe is None:
@@ -197,7 +209,7 @@ class SocketInfo():
         """Lookup remote host name from IP address."""
         if self._remote_host_name is None:
             if SocketInfo._is_ip_addr_private(self.remote_host):
-                self._remote_host_name = self.remote_host + " (private)"
+                self._remote_host_name = self.remote_host
             else:
                 try:
                     self._remote_host_name = socket.gethostbyaddr(self.remote_host)[0]
@@ -207,13 +219,30 @@ class SocketInfo():
         return self._remote_host_name
 
     def __str__(self):
+        formatted_time = self.time.strftime("%b %d %X")
+        local_address = self.local_host + ':' + self.local_port
         remote = self.remote_host
         if not self._remote_host_name is None:
             remote = self._remote_host_name
-        string = '{0} ; {1} ; {2} ; {3} ; {4}:{5} ; {6}:{7} ; {8} ; {9} ; {10} ; {11}'.format(self.socket_type, self.socket_id, self.inode,  
-            self.lookup_user(), self.local_host, self.local_port, remote, self.remote_port, self.state, 
-            self.lookup_pid(), self.lookup_exe(), self.lookup_cmdline())
+        remote_address = remote + ':' + self.remote_port
+#Time            Proto ID  User     Local Address        Foreign Address      State       PID   Exe                  Command Line
+#Sep 08 18:15:07 tcp   0   alice    127.0.0.1:8080       0.0.0.0:0            LISTEN      1810  /usr/bin/python2.7   /usr/bin/python foo.py
+        string = '{0} {1:5} {2:3} {3:8} {4:20} {5:20} {6:11} {7:5} {8:20} {9}'.format(
+            formatted_time,        # 0
+            self.socket_type,      # 1
+            str(self.uid),         # 2
+            self.lookup_user(),    # 3
+            local_address,         # 4
+            remote_address,        # 5
+            self.state,            # 6
+            self.lookup_pid(),     # 7
+            self.lookup_exe(),     # 8
+            self.lookup_cmdline()) # 9
         return string;                
+
+    def dump_str(self):
+        string = "fingerprint: {0} ; remainder: {1}".format(self.fingerprint, str(self))
+        return string
 
     @staticmethod
     def _is_ip_addr_private(addr):
@@ -267,13 +296,48 @@ class SocketInfo():
         This function returns
             12764
         """
-        for item in glob.glob('/proc/[0-9]*/fd/[0-9]*'):
+
+        # DEBUG_PRINT
+        #print("_get_pid_of_inode(): inode {0}".format(inode))
+        #sys.stdout.flush()
+
+        pid = None
+        for fd_link in glob.glob('/proc/[0-9]*/fd/[0-9]*'):
             try:
-                if re.search(inode, os.readlink(item)):
-                    return item.split('/')[2]
-            except:
-                pass
-        return None
+                # Dereference symbolic link.
+                # In above example, the link is:
+                #     /proc/12764/fd/4 -> socket:[139165]
+                # fd_link would be
+                #     /proc/12764/fd/4
+                # and dref will be
+                #     socket:[139165]
+                deref = None
+                deref = os.readlink(fd_link); 
+
+                # Does the dereferenced link have inode in it?
+                if re.search(inode, deref):
+                    # If so, PID has been found.
+                    pid = fd_link.split('/')[2]
+                    break
+
+            except OSError as ex:
+
+                # DEBUG_PRINT
+                #message = 'PID search exception: inode {0}, fd_link {1}, deref {2}: {3}'.format(
+                #   inode, fd_link, str(deref), str(ex))
+                #print(message)
+                #sys.stdout.flush()
+
+                # "No such file or directory" is expected. Connection ended in between glob.glob() and readlink().
+                # Often happens with udp sockets; e.g. for a DNS lookup.
+                if ex.errno != errno.ENOENT:
+                    raise ex
+        
+        # DEBUG_PRINT
+        #print("    pid {0}, fd_link {1}, deref {2}".format(pid, fd_link, deref))
+        #sys.stdout.flush()
+
+        return pid
     
 class SocketFilter():
     """Base class for SocketInfo filters."""
@@ -414,25 +478,12 @@ class GenericFilter(SocketFilter):
             self._state_filters_out(socket_info))
         return filter_out
 
-class NoPidFilter(SocketFilter):
-    """NoPidFilter is a SocketFilter that filters on out SocketInfos that have no pid."""
-
-    def filter_out(self, socket_info):
-        """Return True if socket_info should be filtered out.
-
-        TODO: Is process dead when pid is None, or why is it None? If process is
-        dead and socket is still open, why is the socket not associated with parent 
-        process? (See "Zombies" GenericFilter.)
-        """
-        filter_out = socket_info.lookup_pid() is None
-        return filter_out
-
 class NetStat():
     """NetStat creates SocketInfo instances from lines in /proc/net/tcp and /proc/net/udp"""
 
-    def __init__(self, monitor=None):
+    def __init__(self, netstat_id):
         """Create SocketInfo instances."""
-        self._monitor = monitor
+        self.netstat_id = netstat_id
         self.socket_infos = []
 
         # Load sockets 
@@ -448,12 +499,12 @@ class NetStat():
 
         # Create SocketInfos. 
         for line in content:
-            info = SocketInfo(socket_type, line, self._monitor)
-            if not info.has_been_seen:
-                self.socket_infos.append(info)
+            info = SocketInfo(socket_type, line)
+            self.socket_infos.append(info)
 
 class Monitor():
     """Monitor creates, filters, and reports SocketInfos at regular intervals."""
+    _closing_states = ['FIN_WAIT1', 'FIN_WAIT2', 'TIME_WAIT', 'CLOSE', 'CLOSE_WAIT', 'LAST_ACK', 'CLOSING']
 
     def __init__(self, interval = MONITOR_INTERVAL, filters = None):
         """Create a Monitor that monitors every interval seconds using the specified filters."
@@ -469,39 +520,70 @@ class Monitor():
         self._interval = interval
         self._filters = filters
         self._seen = {}
-        self._next_id = 1;
 
         self._clean_counter = 0
         self._clean_interval = int(60 * CLEAN_INTERVAL / interval)
 
+        self._next_netstat_id = 1
+
     def _do_netstat(self):
         """Create a NetStat, filter out SocketInfos, and report."""
-        # Create NetStat
-        netstat = NetStat(self)
+        # Lookup all current sockets.
+        netstat = NetStat(self._next_netstat_id)
+        self._next_netstat_id += 1
 
         # Process results.
         for socket_info in netstat.socket_infos:
-            # Filtered out?
-            filter_out = False
-            if not self._filters is None:
-                for socket_filter in self._filters:
-                    if socket_filter.filter_out(socket_info):
-                        filter_out = True
-                        break
+            # Determine whether to display socket.
+            filter_out = self._filter_socket(socket_info)
 
-            # Print
+            # Display socket.
             if not filter_out:
-                # Display SocketInfo
                 if LOOKUP_REMOTE_HOST_NAME:
                     socket_info.lookup_remote_host_name()
-                time = socket_info.time.strftime("%a %b %d %I:%M:%S %p")
-                print('> {0} ; {1} ; {2}'.format(self._next_id, time, str(socket_info)))
+                socket_info.assign_uid()
+                print(str(socket_info))
                 sys.stdout.flush()
 
-                # Mark reported
-                socket_info.reported = True
+    def _filter_socket(self, socket_info):
+        """Return true if socket should be filtered out; i.e. not displayed to user."""
 
-                self._next_id += 1
+        # Has this SocketInfo already been seen?
+        seen_info = self.lookup_seen(socket_info)
+        if not seen_info is None:
+            return True
+
+        # Finish initializing SocketInfo.
+        socket_info.finish_initializing()
+
+        # Filter out if PID was not found. PID can be missing if process exited in between the time
+        # when the socket's inode was found and when the search for the socket's PID was made. 
+        # (See OSError exception handler in _get_pid_of_inode().) Sometimes this is because of a 
+        # short lived socket; e.g. UDP sockets for things such as DNS lookups. Other times, 
+        # it's because the process did an exec and the inode for the socket is now owned by 
+        # the child process. The PID for the child should be found the next time Monitor does 
+        # a NetStat, assuming the child doesn't exit too. Not all sockets will be seen, depending 
+        # on what MONITOR_INTERVAL is set to. A NetStat is done every MONITOR_INTERVAL seconds. The 
+        # default for MONITOR_INTERVAL is 1 second, so most connections (especially TCP connections) 
+        # should be seen.
+        pid = socket_info.lookup_pid()
+        if pid is None:
+            return True
+
+        # Mark SocketInfo as seen, so overhead of processing isn't done again.
+        self._mark_seen(socket_info)
+
+        # Filter out any closing connections that have been turned over to init. 
+        if pid == "1" and socket_info.state in Monitor._closing_states:
+            return True
+
+        # Check filters provided by user.
+        if not self._filters is None:
+            for socket_filter in self._filters:
+                if socket_filter.filter_out(socket_info):
+                    return True
+
+        return False
 
     def lookup_seen(self, socket_info):
         """Return previously seen SocketInfo that matches fingerprint of socket_info."""
@@ -513,7 +595,7 @@ class Monitor():
         seen_info = self.lookup_seen(socket_info)
         return not seen_info is None
 
-    def mark_seen(self, socket_info):
+    def _mark_seen(self, socket_info):
         """Record socket_info as seen."""
         self._seen[socket_info.fingerprint] = socket_info
 
@@ -528,6 +610,10 @@ class Monitor():
 
     def monitor(self):
         """Perform a NetStat every MONITOR_INTERVAL seconds."""
+        # Print header
+        print("Time            Proto ID  User     Local Address        Foreign Address      State       PID   Exe                  Command Line")
+        sys.stdout.flush()
+
         while True:
             self._do_netstat()
             self._clean()
