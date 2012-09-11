@@ -1,4 +1,19 @@
 #!/usr/bin/python3
+#
+# Copyright 2012 Sean Alexandre
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+# 
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+# 
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import unittest
 from netstat import *
@@ -44,6 +59,7 @@ class TestSocketInfo(unittest.TestCase):
         """
         line = "268: 0100007F:0035 00000000:0000 07 00000000:00000000 00:00000000 00000000     0        0 139165 2 0000000000000000 0"
         info = SocketInfo("tcp", line)
+        info.finish_initializing()
         self.assertEqual(info.state, "CLOSE")
         self.assertEqual(info.local_host, "127.0.0.1")
         self.assertEqual(info.local_port, "53")

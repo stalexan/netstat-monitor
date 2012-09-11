@@ -35,23 +35,36 @@ LOOKUP_REMOTE_HOST_NAME -- Whether to convert IP addresses to host names.
 
 """
 
-import time
+import argparse
+import configparser
 import datetime
-import sys
-import pwd
-import os
-import re
-import glob
-import socket
 import errno
+import glob
+import os
+import platform
+import pwd
+import re
+import socket
+import sys
+import time
 
-MONITOR_INTERVAL =    1 # Number of seconds between each netstat.
-CLEAN_INTERVAL =     60 # Number of minutes "seen" list grows before being cleaned out.
+MONITOR_INTERVAL =   1 # Number of seconds between each netstat.
+CLEAN_INTERVAL =     5 # Number of minutes "seen" list grows before being cleaned out.
 
 LOOKUP_REMOTE_HOST_NAME = True # Whether to convert IP addresses to host names by doing a hosth name lookup.
 
 PROC_TCP = "/proc/net/tcp"
 PROC_UDP = "/proc/net/udp"
+
+TESTED_KERNEL = "3.2.0"
+
+class MonitorException(Exception):
+    def __init__(self, message, return_code=-1):
+        self.message = message
+        self.return_code = return_code
+
+    def __str__(self):
+        return self.message
 
 '''
 SocketInfo records socket info from /proc/net/tcp and /proc/net/udp
@@ -122,6 +135,8 @@ class SocketInfo():
         self.socket_id = self._line_array[0][:-1] # Remove trailing colon.
         self.inode = self._line_array[9]
         self.fingerprint = '{0} {1} {2}'.format(self.socket_type, self.socket_id, self.inode)
+
+        self.last_seen = 0
 
     def finish_initializing(self):
         """Finish initializing. Only needed if this SocketInfo will be kept."""
@@ -218,6 +233,9 @@ class SocketInfo():
             self._remote_host_name = self._remote_host_name.strip()
         return self._remote_host_name
 
+    def record_last_seen(self, netstat_id):
+        self.last_seen = netstat_id
+
     def __str__(self):
         formatted_time = self.time.strftime("%b %d %X")
         local_address = self.local_host + ':' + self.local_port
@@ -297,7 +315,7 @@ class SocketInfo():
             12764
         """
 
-        # DEBUG_PRINT
+        # LOG
         #print("_get_pid_of_inode(): inode {0}".format(inode))
         #sys.stdout.flush()
 
@@ -322,18 +340,18 @@ class SocketInfo():
 
             except OSError as ex:
 
-                # DEBUG_PRINT
+                # LOG
                 #message = 'PID search exception: inode {0}, fd_link {1}, deref {2}: {3}'.format(
                 #   inode, fd_link, str(deref), str(ex))
                 #print(message)
                 #sys.stdout.flush()
 
-                # "No such file or directory" is expected. Connection ended in between glob.glob() and readlink().
-                # Often happens with udp sockets; e.g. for a DNS lookup.
+                # ENOENT, "No such file or directory", can happen if socket closed in between 
+                # glob.glob() and readlink().
                 if ex.errno != errno.ENOENT:
                     raise ex
         
-        # DEBUG_PRINT
+        # LOG
         #print("    pid {0}, fd_link {1}, deref {2}".format(pid, fd_link, deref))
         #sys.stdout.flush()
 
@@ -348,8 +366,9 @@ class SocketFilter():
 
 class GenericFilter(SocketFilter):
     """GenericFilter is a SocketFilter that filters on properties of SocketInfo."""
+    valid_parameter_names = ["pid", "exe", "cmdline", "user", "local_hosts", "local_ports", "remote_hosts", "remote_ports", "states"]
 
-    def __init__(self, pid=None, exe=None, cmdline=None, user=None, local_hosts=None, local_ports=None, remote_hosts=None, remote_ports=None, states=None):
+    def __init__(self, name, pid=None, exe=None, cmdline=None, user=None, local_hosts=None, local_ports=None, remote_hosts=None, remote_ports=None, states=None):
         """Create a GenericFilter that filters out SocketInfos that match all the specified properties.
 
         All arguments are optional. Arguments that aren't set default to None, for "don't care." 
@@ -374,20 +393,47 @@ class GenericFilter(SocketFilter):
           out if its state matches any of the states.
         """
 
+        self.name = name 
         self.pid = pid 
         self.exe = exe
         self.cmdline = cmdline
         self.user = user
-        self.local_hosts = local_hosts
-        self.local_ports = local_ports
-        self.remote_hosts = remote_hosts
-        self.remote_ports = remote_ports
-        self.states = states
+        self.local_hosts = GenericFilter._parse_list_string(local_hosts)
+        self.local_ports = GenericFilter._parse_list_string(local_ports)
+        self.remote_hosts = GenericFilter._parse_list_string(remote_hosts)
+        self.remote_ports = GenericFilter._parse_list_string(remote_ports)
+        self.states = GenericFilter._parse_list_string(states)
+
+    @staticmethod
+    def _parse_list_string(string):
+        result = None
+        if not string is None:
+            string = string.strip()
+            if len(string) > 0:
+                result = [entry.strip() for entry in string.split(',')]
+        return result                    
 
     def __str__(self):
-        string = 'pid: {0}, exe: {1}, cmdline: {2}, user: {3}, local_hosts: {4}, local_ports: {5}, remote_hosts: {6}, remote_ports: {7}, states: {8}'.format(
-            self.pid, self.exe, self.cmdline, self.user, self.local_hosts, self.local_ports, self.remote_hosts, self.remote_ports, self.states)
+        parts = []
+        self._add_str_part(parts, 'name')
+        self._add_str_part(parts, 'pid')
+        self._add_str_part(parts, 'exe')
+        self._add_str_part(parts, 'cmdline')
+        self._add_str_part(parts, 'user')
+        self._add_str_part(parts, 'local_hosts')
+        self._add_str_part(parts, 'local_ports')
+        self._add_str_part(parts, 'remote_hosts')
+        self._add_str_part(parts, 'remote_ports')
+        self._add_str_part(parts, 'states')
+        string = ''.join(parts)
         return string;                
+
+    def _add_str_part(self, parts, name):
+        attr = getattr(self, name)
+        if not attr is None:
+            if len(parts) > 0:
+                parts.append(", ")
+            parts.append("{0}: {1}".format(name, attr))
 
     def _pid_filters_out(self, socket_info):
         """Return True if socket_info should be filtered out based on pid."""
@@ -480,13 +526,13 @@ class GenericFilter(SocketFilter):
 
 class NetStat():
     """NetStat creates SocketInfo instances from lines in /proc/net/tcp and /proc/net/udp"""
-
     def __init__(self, netstat_id):
         """Create SocketInfo instances."""
+        # Assign id.
         self.netstat_id = netstat_id
-        self.socket_infos = []
 
         # Load sockets 
+        self.socket_infos = []
         self._load('tcp', PROC_TCP)
         self._load('udp', PROC_UDP)
 
@@ -506,7 +552,7 @@ class Monitor():
     """Monitor creates, filters, and reports SocketInfos at regular intervals."""
     _closing_states = ['FIN_WAIT1', 'FIN_WAIT2', 'TIME_WAIT', 'CLOSE', 'CLOSE_WAIT', 'LAST_ACK', 'CLOSING']
 
-    def __init__(self, interval = MONITOR_INTERVAL, filters = None):
+    def __init__(self, interval = MONITOR_INTERVAL, filter_files = None):
         """Create a Monitor that monitors every interval seconds using the specified filters."
         
         Keyword arguments:
@@ -518,19 +564,82 @@ class Monitor():
 
         """
         self._interval = interval
-        self._filters = filters
         self._seen = {}
 
         self._clean_counter = 0
         self._clean_interval = int(60 * CLEAN_INTERVAL / interval)
 
-        self._next_netstat_id = 1
+        self._netstat_id = 0
+
+        # Check for root permissions, so filters work and connection details can be looked up.
+        if os.geteuid() != 0:
+            raise MonitorException("ERROR: Root permissions needed, to lookup connection details.")
+
+        # Check python version.
+        if sys.version_info.major != 3 or sys.version_info.minor < 2:
+            raise MonitorException("ERROR: Python 3.2 or greater needed.")
+
+        # Do a basic check of kernel version, by looking comparing /proc/net headers to expected headers.
+        tcp_header = Monitor._read_first_line(PROC_TCP)
+        udp_header = Monitor._read_first_line(PROC_UDP)
+        if (tcp_header != "sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode" or
+            udp_header != "sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode ref pointer drops"):
+            raise MonitorException("ERROR: Unexpected /proc/net file format. This could be due to kernel version. Current kernel: {0}. Tested kernel: {1}.".format(
+                platform.uname()[2], TESTED_KERNEL))
+
+        # Load filters
+        self._load_filters(filter_files)
+
+    @staticmethod
+    def _read_first_line(path):
+        with open(path, 'r') as proc_file:
+            line = proc_file.readline().strip()
+        return line
+
+    def _load_filters(self, filter_files):
+        self._filters = []
+        if filter_files is None:
+            return
+
+        for file_name in filter_files:
+            try:
+                filter_file = open(file_name)
+                parser = configparser.ConfigParser()
+                parser.read_file(filter_file)
+                for section in parser.sections():
+                    try:
+                        # Reader parameters for this filter
+                        items = parser.items(section)
+                        filter_params = {}
+                        for pair in items:
+                            # Check parameter name
+                            param_name = pair[0].strip()
+                            if not param_name in GenericFilter.valid_parameter_names:
+                                raise MonitorException("ERROR: Unexpected filter parameter {0} for filter {1} in {2}.".format(
+                                    param_name, section, file_name))
+                        
+                            # Record parameter
+                            param_value = pair[1].strip()
+                            filter_params[param_name] = param_value
+
+                        # Create filter
+                        generic_filter = GenericFilter(section, **filter_params)
+                        self._filters.append(generic_filter)
+                        # LOG
+                        #print("filter: {0}".format(generic_filter))
+                        #sys.stdout.flush()
+                    except configparser.Error as ex:
+                        raise MonitorException("ERROR: Parsing error creating {0} filter from file {1}: {2}.".format(section, file_name, str(ex)))
+            except IOError as ex:
+                raise MonitorException("ERROR: Unable to open file {0}: ({1})".format(file_name, str(ex)))
+            except configparser.Error as ex:
+                raise MonitorException("ERROR: Parsing error creating filters from file {0}: {1}.".format(file_name, str(ex)))
 
     def _do_netstat(self):
         """Create a NetStat, filter out SocketInfos, and report."""
         # Lookup all current sockets.
-        netstat = NetStat(self._next_netstat_id)
-        self._next_netstat_id += 1
+        self._netstat_id += 1
+        netstat = NetStat(self._netstat_id)
 
         # Process results.
         for socket_info in netstat.socket_infos:
@@ -551,21 +660,25 @@ class Monitor():
         # Has this SocketInfo already been seen?
         seen_info = self.lookup_seen(socket_info)
         if not seen_info is None:
+            seen_info.record_last_seen(self._netstat_id)
             return True
 
         # Finish initializing SocketInfo.
         socket_info.finish_initializing()
 
-        # Filter out if PID was not found. PID can be missing if process exited in between the time
-        # when the socket's inode was found and when the search for the socket's PID was made. 
-        # (See OSError exception handler in _get_pid_of_inode().) Sometimes this is because of a 
-        # short lived socket; e.g. UDP sockets for things such as DNS lookups. Other times, 
-        # it's because the process did an exec and the inode for the socket is now owned by 
-        # the child process. The PID for the child should be found the next time Monitor does 
-        # a NetStat, assuming the child doesn't exit too. Not all sockets will be seen, depending 
-        # on what MONITOR_INTERVAL is set to. A NetStat is done every MONITOR_INTERVAL seconds. The 
-        # default for MONITOR_INTERVAL is 1 second, so most connections (especially TCP connections) 
-        # should be seen.
+        # Filter out if PID was not found. PID can be missing if either of the following happens
+        # in between the time the socket's inode was found in a /proc/net file and when its
+        # PID was searched for in /proc/*/fd.
+        #     -- Socket was closed. This can happen with short lived sockets; e.g. with a udp
+        #        socket for a DNS lookup. Or, it's possible it could happen with a TCP socket
+        #        although this is less likely since a TCP connection goes through a series
+        #        of states to end.
+        #     -- Process exited. The socket could still be exist, if the process that exited
+        #        did an exec and the child process now owns the socket. It should be seen the 
+        #        next time a NetStat is done.
+        # One variable in all of this is MONITOR_INTERVAL, which determines how often the
+        # /proc/net files are read. The files are read every MONITOR_INTERVAL seconds. The lower
+        # this value, the less likely it is a socket will not be seen. However, CPU load goes up.
         pid = socket_info.lookup_pid()
         if pid is None:
             return True
@@ -597,16 +710,25 @@ class Monitor():
 
     def _mark_seen(self, socket_info):
         """Record socket_info as seen."""
+        socket_info.record_last_seen(self._netstat_id)
         self._seen[socket_info.fingerprint] = socket_info
 
     def _clean(self):
-        """Discard seen SocketInfos if CLEAN_INTERVAL has passed."""
+        """Discard seen SocketInfos that have ended, if CLEAN_INTERVAL has elapsed."""
         self._clean_counter += 1
         if self._clean_counter >= self._clean_interval:
-            self._seen = {}
+            # LOG
+            #before_count = len(self._seen.keys())
+            keep = {}
+            for socket_info in self._seen.values():
+                if socket_info.last_seen == self._netstat_id:
+                    keep[socket_info.fingerprint] = socket_info
+            self._seen = keep
             self._clean_counter = 0
-            print('*** cleaned ***')
-            sys.stdout.flush()
+            # LOG
+            #after_count = len(self._seen.keys())
+            #print("clean: before {0}, after {1}".format(before_count, after_count))
+            #sys.stdout.flush()
 
     def monitor(self):
         """Perform a NetStat every MONITOR_INTERVAL seconds."""
@@ -618,4 +740,23 @@ class Monitor():
             self._do_netstat()
             self._clean()
             time.sleep(self._interval)
+
+def main():
+    # Parse comomand line
+    parser = argparse.ArgumentParser()
+    parser.add_argument('filter_files', nargs='*', help='config files that define filters')
+    args = parser.parse_args()
+
+    # Monitor
+    return_code = 0
+    try:
+        monitor = Monitor(1, args.filter_files)
+        monitor.monitor()
+    except KeyboardInterrupt:
+        print('')
+    except MonitorException as ex:
+        print(str(ex))
+        return_code = ex.return_code
+
+    exit(return_code)
 

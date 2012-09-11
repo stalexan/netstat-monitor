@@ -15,59 +15,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import os
-import sys
-from netstat import GenericFilter
-from netstat import NoPidFilter
-from netstat import Monitor
-
-def main():
-
-    # Check for root permissions, so filters work and connection details can be looked up.
-    if os.geteuid() != 0:
-        print("ERROR: Root permissions needed, to lookup connection details.")
-        sys.exit(-1)
-
-    # Create filters
-    closing_states = ['FIN_WAIT1', 'FIN_WAIT2', 'TIME_WAIT', 'CLOSE', 'CLOSE_WAIT', 'LAST_ACK', 'CLOSING']
-    filters = [ 
-        # Trusted
-        GenericFilter(exe='/usr/sbin/ntpdate', user='root'),
-        GenericFilter(exe='/sbin/dhclient', user='root'),
-        GenericFilter(exe='/usr/sbin/dnsmasq', user='root'),
-        GenericFilter(exe='/usr/sbin/dnsmasq', user='nobody'),
-
-        # Firefox expected
-        GenericFilter(exe='/usr/lib/firefox/firefox', user='alice', remote_ports = ['53', '80', '443']),
-
-        # Claws Mail
-        GenericFilter(exe='/usr/bin/claws-mail', user='alice', remote_hosts = ['.mail.rr.com', '.gmail.com' ]),
-        GenericFilter(exe='/usr/bin/claws-mail', user='alice', remote_ports = ['53']),
-
-        #  VirtualBox: Monitor VMs from within VM.
-        GenericFilter(exe='/usr/lib/virtualbox/VirtualBox'),
-
-        # ssh
-        GenericFilter(cmdline='ssh alice@login.trilug.org', user='alice'),
-
-        # netstat-monitor DNS lookups
-        GenericFilter(cmdline='/usr/bin/python3 ./netstat-monitor', remote_ports = ['53']),
-
-        # upstart-udev-bridge: Seems to have closing connections from firefox, claws, etc. Why?
-        GenericFilter(exe='/sbin/upstart-udev-bridge', user='root', states = closing_states),
-
-        # Zombies: Open handles passed up to init to wait
-        GenericFilter(exe='/sbin/init', user='root'),
-
-        NoPidFilter()
-    ]
-
-    # Monitor
-    try:
-        monitor = Monitor(interval = 1, filters = filters)
-        monitor.monitor()
-    except KeyboardInterrupt:
-        print('')
+from netstat import main
 
 if __name__ == '__main__':
     main()
