@@ -1,0 +1,54 @@
+# Trusted exes
+[ntpupdate]
+exe: /usr/sbin/ntpdate
+user: root
+
+[dhclient]
+exe: /sbin/dhclient
+user: root
+
+[dnsmasq-root]
+exe: /usr/sbin/dnsmasq
+user: root
+
+[dnsmasq-nobody]
+exe: /usr/sbin/dnsmasq
+user: nobody
+
+# Firefox expected
+[firefox]
+exe: /usr/lib/firefox/firefox
+user: ff
+remote_ports: 53, 80, 443, 8080
+
+# Claws Mail
+[claws-mail]
+exe: /usr/bin/claws-mail
+user: alice
+remote_hosts = .mail1.com, .mail2.net, .mail3.org
+
+[claws-dns]
+exe: /usr/bin/claws-mail
+user: alice
+remote_ports: 53
+
+#  VirtualBox: Monitor VMs from within VM.
+[virtualbox]
+exe: /usr/lib/virtualbox/VirtualBox
+
+# ssh
+[ssh-trilug]
+cmdline: ssh alice@login.host.org
+user: alice
+
+# netstat-monitor DNS lookups
+[netstat-dns]
+cmdline: /usr/bin/python3 netstat-monitor
+remote_ports = 53
+
+# upstart-udev-bridge: Seems to have closing connections from firefox, claws, etc. Why?
+[upstart]
+exe: /sbin/upstart-udev-bridge
+user: root
+states = FIN_WAIT1, FIN_WAIT2, TIME_WAIT, CLOSE, CLOSE_WAIT, LAST_ACK, CLOSING
+
