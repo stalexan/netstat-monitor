@@ -4,7 +4,7 @@ Netstat-monitor -- Monitor network connections on your system
 
 ## Description
 
-Netstat-monitor is a command line tool for monitoring network connections. Its output looks similar to the output from the netstat command, when netstat is run with the options "netstat --inet -alp". One difference is that netstat-monitor can be left running, and it will report new connections as they are made. Also, filters can be created to limit what's displayed to just what's unexpected or interesting.
+Netstat-monitor is a command line tool for monitoring network connections. Its output looks similar to the output from the netstat command with the options "netstat --inet -alp". One difference is that netstat-monitor can be left running, and will report new connections as they are made. Also, filters can be created to limit what's displayed to just what's unexpected or interesting.
 
 ## Installation
 
@@ -27,7 +27,7 @@ Install, on a Debian or Ubuntu machine:
     $ sudo apt-get install python3
     $ sudo python setup.py install
 
-The install step is not necessary, though. Netstat-monitor can be run directly from the directory the files were extracted to.
+Or, the install step can be skipped and netstat-monitor can be run from the directory the files were extracted to. This doesn't put the files in their expected places, but should work fine.
 
 ## Running
 
@@ -35,7 +35,14 @@ To run:
 
     netstat-monitor
 
+Here's some sample output:
+
+    Time            Proto ID  User     Local Address        Foreign Address      State       PID   Exe                  Command Line
+    Sep 16 14:20:50 tcp   1   root     0.0.0.0:22           0.0.0.0:0            LISTEN      875   /usr/sbin/sshd       /usr/sbin/sshd -D
+    Sep 16 14:20:50 tcp   2   root     127.0.0.1:631        0.0.0.0:0            LISTEN      927   /usr/sbin/cupsd      /usr/sbin/cupsd -F
+    Sep 16 14:56:13 tcp   3   root     192.168.1.4:22       other.com:41453      ESTABLISHED 24639 /usr/sbin/sshd       sshd: alice [priv]
+
 ## Filters
 
-By default netstat-monitor will report all connections.  <TODO>
+By default netstat-monitor will report all connections.  TODO
 
