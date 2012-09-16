@@ -53,7 +53,7 @@ Filters are created in config files that are listed on the command line. For exa
 
     netstat-monitor sample-filters
 
-The file sample-filters comes is provided with the install, and has some example filters:
+The file sample-filters is provided with the install, and has some example filters:
 
     [ntpupdate]
     exe: /usr/sbin/ntpdate
@@ -69,7 +69,7 @@ The file sample-filters comes is provided with the install, and has some example
     user: root
     states = FIN_WAIT1, FIN_WAIT2, TIME_WAIT, CLOSE, CLOSE_WAIT, LAST_ACK, CLOSING
 
-Each section defines a new filter. A section starts with the filter name, enclosed in square brackets. Each line after that defines a filter parameter. For example, the first section defines a filter called ntpupdate that has two parameters: one for exe and one for user. This filter will look for connections with exe set to /usr/sbin/ntpupdate and user set to root. Any connections with these settings will be filtered out, and not displayed.
+Each section defines a new filter. A section starts with the filter name, enclosed in square brackets. Each line after that defines a filter parameter. For example, the first section defines a filter called ntpupdate that has two parameters: exe and user. This filter will look for connections with exe set to /usr/sbin/ntpupdate and user set to root. Any connections with these settings will be filtered out, and not displayed.
 
 The available filter parameters are:
 
