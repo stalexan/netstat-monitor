@@ -4,11 +4,11 @@ Netstat-monitor -- Monitor network connections on your system
 
 ## Description
 
-Netstat-monitor is a command line tool for monitoring network connections. Its output looks similar to the output from the netstat command with the options "netstat --inet -alp". One difference is that netstat-monitor can be left running, and will report new connections as they are made. Also, filters can be created to limit what's displayed to just what's unexpected or interesting.
+Netstat-monitor is a command line tool for monitoring network connections. Its output looks similar to the output from the netstat command with the options "netstat --inet -alp". Netstat-monitor can be left running, though, and will report new connections as they are made. Also, filters can be created to limit what's displayed to just what's unexpected or interesting.
 
 ## Installation
 
-Netstat-monitor was written and tested on an Ubuntu 12.04 machine with Python 3.2. It should work fine on most recent distributions of Linux, though. 
+Netstat-monitor was written and tested on an Ubuntu 12.04 machine with Python 3.2. It should work fine on other recent distributions of Linux too, as long as the files tcp and udp in /proc/net have the expected format. Netstat-monitor will do a basic check on the header of these files on startup, to see if they are what it expects.
 
 To get the latest version:
 
@@ -27,7 +27,9 @@ Install, on a Debian or Ubuntu machine:
     $ sudo apt-get install python3
     $ sudo python setup.py install
 
-Or, the install step can be skipped and netstat-monitor can be run from the directory the files were extracted to. 
+This will install the netstat-monitor exe to /usr/local/bin/ and the netstat.py module to /usr/local/lib/python3.2/dist-packages/.
+
+Optionally, the install step can be skipped and netstat-monitor can be run directly from where the files were extracted.
 
 ## Running
 
@@ -53,7 +55,7 @@ Filters are created in config files that are listed on the command line. For exa
 
     netstat-monitor sample-filters
 
-The file sample-filters is provided with the install, and has some example filters:
+The file [sample-filters](https://github.com/stalexan/netstat-monitor/blob/master/sample-filters) is provided with the install, and has some example filters. A few of them are:
 
     [ntpupdate]
     exe: /usr/sbin/ntpdate
@@ -69,7 +71,7 @@ The file sample-filters is provided with the install, and has some example filte
     user: root
     states = FIN_WAIT1, FIN_WAIT2, TIME_WAIT, CLOSE, CLOSE_WAIT, LAST_ACK, CLOSING
 
-Each section defines a new filter. A section starts with the filter name, enclosed in square brackets. Each line after that defines a filter parameter. For example, the first section defines a filter called ntpupdate that has two parameters: exe and user. This filter will look for connections with exe set to /usr/sbin/ntpupdate and user set to root. Any connections with these settings will be filtered out, and not displayed.
+Each section defines a new filter. A section starts with the filter name, enclosed in square brackets. The name can be any alphanumeric string. Each line after that defines a filter parameter. For example, the first section defines a filter called ntpupdate that has two parameters: exe and user. This filter will look for connections with exe set to /usr/sbin/ntpupdate and user set to root. Any connections with these settings will be filtered out, and not displayed.
 
 The available filter parameters are:
 
@@ -81,5 +83,5 @@ The available filter parameters are:
 * local_ports: Comma separated list of local ports.
 * remote_hosts: Comma separated list of remote hosts.
 * remote_ports: Comma separated list of remote ports.
-* states: Connection states.
+* states: Comma separated list of Connection states.
 

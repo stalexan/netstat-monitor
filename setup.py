@@ -16,10 +16,11 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from distutils.core import setup
+from netstat import __version__
 
 setup(
     name='netstat-monitor', 
-    version='1.0c1', 
+    version=__version__,
     py_modules=['netstat'],
     scripts=['netstat-monitor'],
     data_files=[('', ['sample-filters'])],

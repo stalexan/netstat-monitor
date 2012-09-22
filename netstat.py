@@ -29,7 +29,8 @@ GenericFilter -- Filters on properties of SocketInfo.
 
 Variables:
 
-MONITOR_INTERVAL -- How often Monitor collects netstat snapshots, in seconds.
+DEFAULT_MONITOR_INTERVAL -- How often Monitor collects netstat snapshots, in seconds.
+MIN_MONITOR_INTERVAL -- Minimum value for monitor interval.
 CLEAN_INTERVAL -- How often the list of connections is reset, in minutes.
 LOOKUP_REMOTE_HOST_NAME -- Whether to convert IP addresses to host names.
 
@@ -48,10 +49,13 @@ import socket
 import sys
 import time
 
-MONITOR_INTERVAL =   1 # Number of seconds between each netstat.
-CLEAN_INTERVAL =     5 # Number of minutes "seen" list grows before being cleaned out.
+__version__ = "1.0"
 
-LOOKUP_REMOTE_HOST_NAME = True # Whether to convert IP addresses to host names by doing a hosth name lookup.
+DEFAULT_MONITOR_INTERVAL = 1     # Number of seconds between each netstat.
+MIN_MONITOR_INTERVAL =     0.001 # Minimum value for monitor interval.
+CLEAN_INTERVAL =           5     # Number of minutes "seen" list grows before being cleaned out.
+
+LOOKUP_REMOTE_HOST_NAME = True # Whether to convert IP addresses to host names by doing a host name lookup.
 
 PROC_TCP = "/proc/net/tcp"
 PROC_UDP = "/proc/net/udp"
@@ -552,17 +556,20 @@ class Monitor():
     """Monitor creates, filters, and reports SocketInfos at regular intervals."""
     _closing_states = ['FIN_WAIT1', 'FIN_WAIT2', 'TIME_WAIT', 'CLOSE', 'CLOSE_WAIT', 'LAST_ACK', 'CLOSING']
 
-    def __init__(self, interval = MONITOR_INTERVAL, filter_files = None):
+    def __init__(self, interval = DEFAULT_MONITOR_INTERVAL, filter_files = None):
         """Create a Monitor that monitors every interval seconds using the specified filters."
         
         Keyword arguments:
 
         interval -- Number of seconds between each time Monitor creates a Netstat. Defaults
-          to MONITOR_INTERVAL.
+          to DEFAULT_MONITOR_INTERVAL.
         filters -- List of filters to limit what SocketInfos are displayed to the user. Any 
           SocketInfos that match a filter are not displayed. Optional.
 
         """
+        if interval < MIN_MONITOR_INTERVAL:
+            raise MonitorException("ERROR: Monitor interval needs to be at least {0}".format(MIN_MONITOR_INTERVAL))
+
         self._interval = interval
         self._seen = {}
 
@@ -675,9 +682,9 @@ class Monitor():
         #        of states to end.
         #     -- Process exited. The socket could still be exist, if the process that exited
         #        did an exec and the child process now owns the socket. It should be seen the 
-        #        next time a NetStat is done.
-        # One variable in all of this is MONITOR_INTERVAL, which determines how often the
-        # /proc/net files are read. The files are read every MONITOR_INTERVAL seconds. The lower
+        #        next time a NetStat is done, as owned by the child.
+        # One variable in all of this is monitor_interval, which determines how often the
+        # /proc/net files are read. They're read every monitor_interval seconds. The lower
         # this value, the less likely it is a socket will not be seen. However, CPU load goes up.
         pid = socket_info.lookup_pid()
         if pid is None:
@@ -731,7 +738,7 @@ class Monitor():
             #sys.stdout.flush()
 
     def monitor(self):
-        """Perform a NetStat every MONITOR_INTERVAL seconds."""
+        """Perform a NetStat every monitor_interval seconds."""
         # Print header
         print("Time            Proto ID  User     Local Address        Foreign Address      State       PID   Exe                  Command Line")
         sys.stdout.flush()
@@ -743,14 +750,17 @@ class Monitor():
 
 def main():
     # Parse comomand line
-    parser = argparse.ArgumentParser()
-    parser.add_argument('filter_files', nargs='*', help='config files that define filters')
+    parser = argparse.ArgumentParser(prog='netstat-monitor', description='Monitor network connections.')
+    parser.add_argument('--version', action='version', version='%(prog)s ' + __version__)
+    parser.add_argument('-m', '--monitor-interval', type=float, default=float(DEFAULT_MONITOR_INTERVAL),
+        help='How often to check for new connections, in seconds.')
+    parser.add_argument('filter_file', nargs='*', help='Config file that defines filters')
     args = parser.parse_args()
 
     # Monitor
     return_code = 0
     try:
-        monitor = Monitor(1, args.filter_files)
+        monitor = Monitor(args.monitor_interval, args.filter_file)
         monitor.monitor()
     except KeyboardInterrupt:
         print('')
