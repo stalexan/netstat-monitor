@@ -4,11 +4,11 @@ Netstat-monitor -- Monitor network connections on your system
 
 ## Description
 
-Netstat-monitor is a command line tool for monitoring network connections. Its output looks similar to the output from the netstat command with the options "netstat --inet -alp". Netstat-monitor can be left running, though, and will report new connections as they are made. Also, filters can be created to limit what's displayed to just what's unexpected or interesting.
+Netstat-monitor is a command line tool for monitoring network connections. Its output is similar to the output from the netstat command with the options "netstat --inet -alp". Netstat-monitor can be left running, though, and will report new connections as they are made. Also, filters can be created to limit what's displayed to just what's unexpected or interesting.
 
 ## Installation
 
-Netstat-monitor was written and tested on an Ubuntu 12.04 machine with Python 3.2. It should work fine on other recent distributions of Linux too, as long as the files tcp and udp in /proc/net have the expected format. Netstat-monitor will do a basic check on the header of these files on startup, to see if they are what it expects.
+Netstat-monitor was written and tested on an Ubuntu 12.04 (Kernel 3.2) machine with Python 3.2. It should work fine on other recent distributions of Linux too, as long as the files tcp and udp in /proc/net have the expected format. Netstat-monitor will do a basic check on the header of these files on startup, to see if they are what it expects.
 
 To get the latest version:
 
@@ -77,6 +77,7 @@ The available filter parameters are:
 
 * exe: The executable for the process that opened the connection.
 * cmd_line: The command line of the process that opened the connection.
+* cmd_line_is_re: Whether cmd_line is a regular expression (true/false). Default is false.
 * pid: The pid of the process that opened the connection.
 * user: The user for the process that opened the connection.
 * local_hosts: Comma separated list of local hosts.

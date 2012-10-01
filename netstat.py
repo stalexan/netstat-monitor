@@ -49,7 +49,7 @@ import socket
 import sys
 import time
 
-__version__ = "1.0"
+__version__ = "1.1rc1"
 
 DEFAULT_MONITOR_INTERVAL = 1     # Number of seconds between each netstat.
 MIN_MONITOR_INTERVAL =     0.001 # Minimum value for monitor interval.
@@ -370,9 +370,9 @@ class SocketFilter():
 
 class GenericFilter(SocketFilter):
     """GenericFilter is a SocketFilter that filters on properties of SocketInfo."""
-    valid_parameter_names = ["pid", "exe", "cmdline", "user", "local_hosts", "local_ports", "remote_hosts", "remote_ports", "states"]
+    valid_parameter_names = ["pid", "exe", "cmdline", "cmdline_is_re", "user", "local_hosts", "local_ports", "remote_hosts", "remote_ports", "states"]
 
-    def __init__(self, name, pid=None, exe=None, cmdline=None, user=None, local_hosts=None, local_ports=None, remote_hosts=None, remote_ports=None, states=None):
+    def __init__(self, name, pid=None, exe=None, cmdline=None, cmdline_is_re=None, user=None, local_hosts=None, local_ports=None, remote_hosts=None, remote_ports=None, states=None):
         """Create a GenericFilter that filters out SocketInfos that match all the specified properties.
 
         All arguments are optional. Arguments that aren't set default to None, for "don't care." 
@@ -401,12 +401,18 @@ class GenericFilter(SocketFilter):
         self.pid = pid 
         self.exe = exe
         self.cmdline = cmdline
+        self.cmdline_is_re = cmdline_is_re
         self.user = user
         self.local_hosts = GenericFilter._parse_list_string(local_hosts)
         self.local_ports = GenericFilter._parse_list_string(local_ports)
         self.remote_hosts = GenericFilter._parse_list_string(remote_hosts)
         self.remote_ports = GenericFilter._parse_list_string(remote_ports)
         self.states = GenericFilter._parse_list_string(states)
+
+        # Create regular expression for cmdline
+        self.cmdline_re = None
+        if self.cmdline_is_re:
+            self.cmdline_re = re.compile(self.cmdline)
 
     @staticmethod
     def _parse_list_string(string):
@@ -423,6 +429,7 @@ class GenericFilter(SocketFilter):
         self._add_str_part(parts, 'pid')
         self._add_str_part(parts, 'exe')
         self._add_str_part(parts, 'cmdline')
+        self._add_str_part(parts, 'cmdline_is_re')
         self._add_str_part(parts, 'user')
         self._add_str_part(parts, 'local_hosts')
         self._add_str_part(parts, 'local_ports')
@@ -460,7 +467,10 @@ class GenericFilter(SocketFilter):
         filter_out = True
         if not self.cmdline is None:
             socket_cmdline = socket_info.lookup_cmdline()
-            filter_out = socket_cmdline == self.cmdline
+            if self.cmdline_re is None:
+                filter_out = socket_cmdline == self.cmdline
+            else:
+                filter_out = self.cmdline_re.match(socket_cmdline)
         return filter_out
 
     def _user_filters_out(self, socket_info):
@@ -626,7 +636,13 @@ class Monitor():
                                     param_name, section, file_name))
                         
                             # Record parameter
-                            param_value = pair[1].strip()
+                            if param_name == "cmdline_is_re":
+                                try:
+                                    param_value = parser[section].getboolean("cmdline_is_re")
+                                except ValueError:
+                                    raise MonitorException("ERROR: Expecting true or false for cmdline_is_re for {0} in {1}".format(section, file_name))
+                            else:
+                                param_value = pair[1].strip()
                             filter_params[param_name] = param_value
 
                         # Create filter
