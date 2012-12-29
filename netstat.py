@@ -384,6 +384,7 @@ class GenericFilter(SocketFilter):
         pid -- If set, pid that a SocketInfo must match to be filtered out.
         exe -- If set, exe that a SocketInfo must match to be filtered out.
         cmdline -- If set, cmdline that a SocketInfo must match to be filtered out.
+        cmdline_is_re -- If true, cmdline is treated as a regular expression.
         user -- If set, user that a SocketInfo must match to be filtered out.
         local_hosts -- If set, an array of IP addresses to filter on. A SocketInfo is filtered 
           out if its local_host matches any of the addresses.
@@ -470,7 +471,7 @@ class GenericFilter(SocketFilter):
             if self.cmdline_re is None:
                 filter_out = socket_cmdline == self.cmdline
             else:
-                filter_out = self.cmdline_re.match(socket_cmdline)
+                filter_out = not self.cmdline_re.match(socket_cmdline) is None
         return filter_out
 
     def _user_filters_out(self, socket_info):
