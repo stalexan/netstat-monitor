@@ -4,7 +4,7 @@ Netstat-monitor -- Monitor network connections on your system
 
 ## Description
 
-Netstat-monitor is a command line tool for monitoring network connections. Its output is similar to the output from the netstat command with the options "netstat --inet -alp". Netstat-monitor can be left running, though, and will report new connections as they are made. Also, filters can be created to limit what's displayed to just what's unexpected or interesting.
+Netstat-monitor is a command line tool for monitoring network connections. Its output is similar to the output from the netstat command with the options "netstat --inet -alp". Netstat-monitor can be left running, though, and will report new connections as they are made. Also, filters can be used to limit what's displayed to just what's unexpected or interesting.
 
 ## Installation
 
@@ -49,7 +49,7 @@ Here's some sample output:
 
 ## Filters
 
-Filters can be created to limit what's displayed to just unexpected or interesting connections. A typical use case is to run netstat-monitor without any filters at first, and then add filters over time until only interesting connections are displayed.
+Filters can be used to limit what's displayed to just unexpected or interesting connections. A typical use case is to run netstat-monitor without any filters at first, and then add filters over time until only interesting connections are displayed.
 
 Filters are created in config files that are listed on the command line. For example:
 

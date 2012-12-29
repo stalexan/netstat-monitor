@@ -765,7 +765,7 @@ class Monitor():
             time.sleep(self._interval)
 
 def main():
-    # Parse comomand line
+    # Parse command line
     parser = argparse.ArgumentParser(prog='netstat-monitor', description='Monitor network connections.')
     parser.add_argument('--version', action='version', version='%(prog)s ' + __version__)
     parser.add_argument('-m', '--monitor-interval', type=float, default=float(DEFAULT_MONITOR_INTERVAL),
