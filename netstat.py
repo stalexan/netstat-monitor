@@ -160,6 +160,7 @@ class SocketInfo():
         # Addresses
         self.local_host,self.local_port = SocketInfo._convert_ip_port(self._line_array[1])
         self.remote_host,self.remote_port = SocketInfo._convert_ip_port(self._line_array[2]) 
+        self.is_loopback = SocketInfo._is_loopback(self.local_host)
 
         # Save rest of lookup for "lookup" methods, since expensive and info
         # may not be needed if filtered out.
@@ -169,6 +170,13 @@ class SocketInfo():
         self._exe = None
         self._cmdline = None
         self._remote_host_name = None
+
+    @staticmethod
+    def _is_loopback(addr):
+        """Determine if IP address addr is localhost."""
+        # TODO: Do an ifconfig to lookup loopback address at runtime, instead of hardcoding here.
+        is_loopback = addr == "127.0.0.1"
+        return is_loopback
 
     def has_been_reported(self):
         """Return True if this socket has been reported to user."""
@@ -567,13 +575,14 @@ class Monitor():
     """Monitor creates, filters, and reports SocketInfos at regular intervals."""
     _closing_states = ['FIN_WAIT1', 'FIN_WAIT2', 'TIME_WAIT', 'CLOSE', 'CLOSE_WAIT', 'LAST_ACK', 'CLOSING']
 
-    def __init__(self, interval = DEFAULT_MONITOR_INTERVAL, filter_files = None):
+    def __init__(self, interval = DEFAULT_MONITOR_INTERVAL, ignore_loopback = False, filter_files = None):
         """Create a Monitor that monitors every interval seconds using the specified filters."
         
         Keyword arguments:
 
         interval -- Number of seconds between each time Monitor creates a Netstat. Defaults
           to DEFAULT_MONITOR_INTERVAL.
+        ignore_loopback -- Ignore local connections.
         filters -- List of filters to limit what SocketInfos are displayed to the user. Any 
           SocketInfos that match a filter are not displayed. Optional.
 
@@ -582,6 +591,7 @@ class Monitor():
             raise MonitorException("ERROR: Monitor interval needs to be at least {0}".format(MIN_MONITOR_INTERVAL))
 
         self._interval = interval
+        self._ignore_loopback = ignore_loopback
         self._seen = {}
 
         self._clean_counter = 0
@@ -710,6 +720,10 @@ class Monitor():
         # Mark SocketInfo as seen, so overhead of processing isn't done again.
         self._mark_seen(socket_info)
 
+        # Filter out local connections.
+        if self._ignore_loopback and socket_info.is_loopback:
+            return True
+
         # Filter out any closing connections that have been turned over to init. 
         if pid == "1" and socket_info.state in Monitor._closing_states:
             return True
@@ -769,6 +783,7 @@ def main():
     # Parse command line
     parser = argparse.ArgumentParser(prog='netstat-monitor', description='Monitor network connections.')
     parser.add_argument('--version', action='version', version='%(prog)s ' + __version__)
+    parser.add_argument('-i', '--ignore-loopback', action='store_true', help='Ignore connections to loopback address.')
     parser.add_argument('-m', '--monitor-interval', type=float, default=float(DEFAULT_MONITOR_INTERVAL),
         help='How often to check for new connections, in seconds.')
     parser.add_argument('filter_file', nargs='*', help='Config file that defines filters')
@@ -777,7 +792,7 @@ def main():
     # Monitor
     return_code = 0
     try:
-        monitor = Monitor(args.monitor_interval, args.filter_file)
+        monitor = Monitor(args.monitor_interval, args.ignore_loopback, args.filter_file)
         monitor.monitor()
     except KeyboardInterrupt:
         print('')
