@@ -76,8 +76,8 @@ Each section defines a new filter. A section starts with the filter name, enclos
 The available filter parameters are:
 
 * exe: The executable for the process that opened the connection.
-* cmd_line: The command line of the process that opened the connection.
-* cmd_line_is_re: Whether cmd_line is a regular expression (true/false). Default is false.
+* cmdline: The command line of the process that opened the connection.
+* cmdline_is_re: Whether cmd_line is a regular expression (true/false). Default is false.
 * pid: The pid of the process that opened the connection.
 * user: The user for the process that opened the connection.
 * local_hosts: Comma separated list of local hosts.
