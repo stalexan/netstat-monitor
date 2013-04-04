@@ -8,7 +8,9 @@ Netstat-monitor is a command line tool for monitoring network connections. Its o
 
 ## Installation
 
-Netstat-monitor was written and tested on an Ubuntu 12.04 (Kernel 3.2) machine with Python 3.2. It should work fine on other recent distributions of Linux too, as long as the files tcp and udp in /proc/net have the expected format. Netstat-monitor will do a basic check on the header of these files on startup, to see if they are what it expects.
+Netstat-monitor has been tested on Debian based distros based on the Linux 3.2 kernel; 
+specifically: Ubuntu 12.04 and Debian 7.0 (Wheezy). It may work on other distros, if the
+format of the /proc filespace is the same. But, this hasn't been tested.
 
 To get the latest version:
 
@@ -29,7 +31,7 @@ Install, on a Debian or Ubuntu machine:
 
 This will install the netstat-monitor exe to /usr/local/bin/ and the netstat.py module to /usr/local/lib/python3.2/dist-packages/.
 
-Optionally, the install step can be skipped and netstat-monitor can be run directly from where the files were extracted.
+Another option, instead of doing an install, is to just run netstat-monitor directly from where the files were extracted.
 
 ## Running
 
@@ -85,4 +87,8 @@ The available filter parameters are:
 * remote_hosts: Comma separated list of remote hosts.
 * remote_ports: Comma separated list of remote ports.
 * states: Comma separated list of Connection states.
+
+There's a command line parameter that acts as a kind of filter as well: --ignore-loopback. 
+It will cause any connections on the loopback address (127.0.0.1) to be filtered out. 
+By default it's false.
 
