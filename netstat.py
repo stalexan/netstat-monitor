@@ -332,6 +332,7 @@ class SocketInfo():
         #sys.stdout.flush()
 
         pid = None
+        deref_match = "socket:[{0}]".format(inode)
         for fd_link in glob.glob('/proc/[0-9]*/fd/[0-9]*'):
             try:
                 # Dereference symbolic link.
@@ -344,9 +345,8 @@ class SocketInfo():
                 deref = None
                 deref = os.readlink(fd_link); 
 
-                # Does the dereferenced link have inode in it?
-                if re.search(inode, deref):
-                    # If so, PID has been found.
+                # PID has been found if deref matches.
+                if deref == deref_match:
                     pid = fd_link.split('/')[2]
                     break
 
