@@ -110,9 +110,15 @@ class SocketInfo():
     lookup_exe(), lookup_cmdline(), and lookup_remote_host_name().
     """
 
-    _state_mappings = { '01' : 'ESTABLISHED', '02' : 'SYN_SENT', '03' : 'SYN_RECV', '04' : 'FIN_WAIT1',
-        '05' : 'FIN_WAIT2', '06' : 'TIME_WAIT', '07' : 'CLOSE', '08' : 'CLOSE_WAIT',
-        '09' : 'LAST_ACK', '0A' : 'LISTEN', '0B' : 'CLOSING' }
+    UNDEFINED_STATE = 'UNDEFINED'
+    CLOSED_STATE = 'CLOSED'
+    NA_STATE = ''
+
+    _state_mappings = { 
+         '01' : 'ESTABLISHED',  '02' : 'SYN_SENT',      '03' : 'SYN_RECV', 
+         '04' : 'FIN_WAIT1',    '05' : 'FIN_WAIT2',     '06' : 'TIME_WAIT', 
+         '07' : 'CLOSE',        '08' : 'CLOSE_WAIT',    '09' : 'LAST_ACK', 
+         '0A' : 'LISTEN',       '0B' : 'CLOSING' }
 
     _private_regex = [ re.compile(ex) for ex in [
         '^127.\d{1,3}.\d{1,3}.\d{1,3}$',
@@ -132,15 +138,19 @@ class SocketInfo():
 
         """
         self.socket_type = socket_type
-        self.line = line
-        self._line_array = SocketInfo._remove_empty(line.split(' '))
+
+        self.record_line(line)
 
         # Determine fingerprint. 
         self.socket_id = self._line_array[0][:-1] # Remove trailing colon.
         self.inode = self._line_array[9]
         self.fingerprint = '{0} {1} {2}'.format(self.socket_type, self.socket_id, self.inode)
 
+        self.state = self.UNDEFINED_STATE
+
         self.last_seen = 0
+
+        self.was_displayed = False
 
     def finish_initializing(self):
         """Finish initializing. Only needed if this SocketInfo will be kept."""
@@ -148,11 +158,8 @@ class SocketInfo():
         # Default UID. Assign later if SocketInfo is reported to user.
         self.uid = 0
 
-        # State
-        self.state = SocketInfo._state_mappings[self._line_array[3]]
-
-        # Time
-        self.time = datetime.datetime.now();
+        # Lookup state and time.
+        self.update_dynamic_attrs()
 
         # User ID
         self._user_id = self._line_array[7]
@@ -170,6 +177,32 @@ class SocketInfo():
         self._exe = None
         self._cmdline = None
         self._remote_host_name = None
+
+    def update(self, line):
+        """Updates the this SocketInfo using latest line from /proc."""
+        self.record_line(line)
+        self.update_dynamic_attrs()
+
+    def record_line(self, line):
+        """Records line for this socket from /proc."""
+        self.line = line
+        self._line_array = SocketInfo._remove_empty(line.split(' '))
+
+
+    def update_dynamic_attrs(self):
+        """Lookup attributes that change over time."""
+
+        # State
+        if self.socket_type == "tcp":
+            self.state = SocketInfo._state_mappings[self._line_array[3]]
+        else:
+            self.state = self.NA_STATE # "Not Applicable", for udp
+
+        # Time
+        self.update_time()
+
+    def update_time(self):
+        self.time = datetime.datetime.now();
 
     @staticmethod
     def _is_loopback(addr):
@@ -269,6 +302,12 @@ class SocketInfo():
             self.lookup_exe(),     # 8
             self.lookup_cmdline()) # 9
         return string;                
+
+    def mark_closed(self):
+        self.state = self.CLOSED_STATE
+
+    def is_closed(self):
+        return self.state == self.CLOSED_STATE
 
     def dump_str(self):
         string = "fingerprint: {0} ; remainder: {1}".format(self.fingerprint, str(self))
@@ -575,7 +614,7 @@ class Monitor():
     """Monitor creates, filters, and reports SocketInfos at regular intervals."""
     _closing_states = ['FIN_WAIT1', 'FIN_WAIT2', 'TIME_WAIT', 'CLOSE', 'CLOSE_WAIT', 'LAST_ACK', 'CLOSING']
 
-    def __init__(self, interval = DEFAULT_MONITOR_INTERVAL, ignore_loopback = False, filter_files = None):
+    def __init__(self, interval = DEFAULT_MONITOR_INTERVAL, ignore_loopback = False, state_changes = False, filter_files = None):
         """Create a Monitor that monitors every interval seconds using the specified filters."
         
         Keyword arguments:
@@ -583,6 +622,7 @@ class Monitor():
         interval -- Number of seconds between each time Monitor creates a Netstat. Defaults
           to DEFAULT_MONITOR_INTERVAL.
         ignore_loopback -- Ignore local connections.
+        state_changes -- Report connection state changes.
         filters -- List of filters to limit what SocketInfos are displayed to the user. Any 
           SocketInfos that match a filter are not displayed. Optional.
 
@@ -592,6 +632,7 @@ class Monitor():
 
         self._interval = interval
         self._ignore_loopback = ignore_loopback
+        self._state_changes = state_changes
         self._seen = {}
 
         self._clean_counter = 0
@@ -675,30 +716,68 @@ class Monitor():
         self._netstat_id += 1
         netstat = NetStat(self._netstat_id)
 
-        # Process results.
+        # Display active sockets.
         for socket_info in netstat.socket_infos:
             # Determine whether to display socket.
-            filter_out = self._filter_socket(socket_info)
+            socket_info = self._filter_socket(socket_info)
 
             # Display socket.
-            if not filter_out:
+            if not socket_info is None:
                 if LOOKUP_REMOTE_HOST_NAME:
                     socket_info.lookup_remote_host_name()
                 socket_info.assign_uid()
                 print(str(socket_info))
-                sys.stdout.flush()
+                socket_info.was_displayed = True
+
+        # Display closed sockets.
+        if self._state_changes:
+            seen_values = list(self._seen.values())
+            for seen_info in seen_values:
+                if (seen_info.was_displayed and 
+                    seen_info.last_seen != self._netstat_id and
+                    not seen_info.is_closed()):
+
+                    # Mark closed. 
+                    seen_info.mark_closed()
+
+                    # Update time.
+                    seen_info.update_time()
+
+                    # Display
+                    print(str(seen_info))
+
+                    # Remove from seen collection
+                    del self._seen[seen_info.fingerprint]
+
+        sys.stdout.flush()
 
     def _filter_socket(self, socket_info):
-        """Return true if socket should be filtered out; i.e. not displayed to user."""
+        """Return the SocketInfo to use if not filtered, else None."""
 
         # Has this SocketInfo already been seen?
         seen_info = self.lookup_seen(socket_info)
-        if not seen_info is None:
+        already_seen = not seen_info is None
+
+        # Note when last seen
+        if already_seen:
             seen_info.record_last_seen(self._netstat_id)
-            return True
+
+        # Filter out if already seen and state changes are not being reported.
+        if already_seen and not self._state_changes:
+            return None 
 
         # Finish initializing SocketInfo.
-        socket_info.finish_initializing()
+        if already_seen:
+            # Use the seen_info, since it's already looked up most things.
+            orig_state = seen_info.state
+            seen_info.update(socket_info.line)
+            socket_info = seen_info
+        else:
+            socket_info.finish_initializing()
+
+        # Filter out if state hasn't changed.
+        if already_seen and socket_info.state == orig_state:
+            return None
 
         # Filter out if PID was not found. PID can be missing if either of the following happens
         # in between the time the socket's inode was found in a /proc/net file and when its
@@ -715,26 +794,27 @@ class Monitor():
         # this value, the less likely it is a socket will not be seen. However, CPU load goes up.
         pid = socket_info.lookup_pid()
         if pid is None:
-            return True
+            return None 
 
-        # Mark SocketInfo as seen, so overhead of processing isn't done again.
-        self._mark_seen(socket_info)
+        # Mark SocketInfo as seen.
+        if not already_seen:
+            self._mark_seen(socket_info)
 
         # Filter out local connections.
         if self._ignore_loopback and socket_info.is_loopback:
-            return True
+            return None
 
         # Filter out any closing connections that have been turned over to init. 
         if pid == "1" and socket_info.state in Monitor._closing_states:
-            return True
+            return None
 
         # Check filters provided by user.
         if not self._filters is None:
             for socket_filter in self._filters:
                 if socket_filter.filter_out(socket_info):
-                    return True
+                    return None
 
-        return False
+        return socket_info
 
     def lookup_seen(self, socket_info):
         """Return previously seen SocketInfo that matches fingerprint of socket_info."""
@@ -786,13 +866,14 @@ def main():
     parser.add_argument('-i', '--ignore-loopback', action='store_true', help='Ignore connections to loopback address.')
     parser.add_argument('-m', '--monitor-interval', type=float, default=float(DEFAULT_MONITOR_INTERVAL),
         help='How often to check for new connections, in seconds.')
+    parser.add_argument('-s', '--state-changes', action='store_true', help='Report connection state changes.')
     parser.add_argument('filter_file', nargs='*', help='Config file that defines filters')
     args = parser.parse_args()
 
     # Monitor
     return_code = 0
     try:
-        monitor = Monitor(args.monitor_interval, args.ignore_loopback, args.filter_file)
+        monitor = Monitor(args.monitor_interval, args.ignore_loopback, args.state_changes, args.filter_file)
         monitor.monitor()
     except KeyboardInterrupt:
         print('')
