@@ -93,7 +93,6 @@ class SocketInfo():
       that from /proc/net/udp
     line -- The original /proc/net line this SocketInfo is based on (from either /proc/net/tcp
       or /proc/net/udp)
-    socket_id -- The kernel hash slot for the socket.
     inode -- The inode for the socket.
     fingerprint -- A fingerprint, or hash value, for the SocketInfo.
     uid -- Unique id for this socket. 
@@ -132,7 +131,6 @@ class SocketInfo():
     # Example:
     # sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
     # 0:  0100007F:0019 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 7369 1 ffff8801186bc040 100 0 0 10 -1
-    LINE_INDEX_SL               = 0
     LINE_INDEX_LOCAL_ADDRESS    = 1
     LINE_INDEX_REM_ADDRESS      = 2
     LINE_INDEX_ST               = 3
@@ -153,9 +151,11 @@ class SocketInfo():
         self.record_line(line)
 
         # Determine fingerprint. 
-        self.socket_id = self._line_array[SocketInfo.LINE_INDEX_SL][:-1] # Remove trailing colon.
         self.inode = self._line_array[SocketInfo.LINE_INDEX_INODE]
-        self.fingerprint = '{0} {1} {2}'.format(self.socket_type, self.socket_id, self.inode)
+        self.fingerprint = 'type:{0} inode:{1} local_address:{2} rem_address:{3}'.format(
+            self.socket_type, self.inode, 
+            self._line_array[SocketInfo.LINE_INDEX_LOCAL_ADDRESS],
+            self._line_array[SocketInfo.LINE_INDEX_REM_ADDRESS])
 
         self.state = self.UNDEFINED_STATE
 
