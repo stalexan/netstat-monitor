@@ -128,6 +128,17 @@ class SocketInfo():
 
     _next_uid = 1
 
+    # Indicies into fields of lines from /proc/net file
+    # Example:
+    # sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
+    # 0:  0100007F:0019 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 7369 1 ffff8801186bc040 100 0 0 10 -1
+    LINE_INDEX_SL               = 0
+    LINE_INDEX_LOCAL_ADDRESS    = 1
+    LINE_INDEX_REM_ADDRESS      = 2
+    LINE_INDEX_ST               = 3
+    LINE_INDEX_UID              = 7
+    LINE_INDEX_INODE            = 9
+
     def __init__(self, socket_type, line):
         """Create a SocketInfo of type socket_type from line.
 
@@ -142,8 +153,8 @@ class SocketInfo():
         self.record_line(line)
 
         # Determine fingerprint. 
-        self.socket_id = self._line_array[0][:-1] # Remove trailing colon.
-        self.inode = self._line_array[9]
+        self.socket_id = self._line_array[SocketInfo.LINE_INDEX_SL][:-1] # Remove trailing colon.
+        self.inode = self._line_array[SocketInfo.LINE_INDEX_INODE]
         self.fingerprint = '{0} {1} {2}'.format(self.socket_type, self.socket_id, self.inode)
 
         self.state = self.UNDEFINED_STATE
@@ -162,11 +173,11 @@ class SocketInfo():
         self.update_dynamic_attrs()
 
         # User ID
-        self._user_id = self._line_array[7]
+        self._user_id = self._line_array[SocketInfo.LINE_INDEX_UID]
 
         # Addresses
-        self.local_host,self.local_port = SocketInfo._convert_ip_port(self._line_array[1])
-        self.remote_host,self.remote_port = SocketInfo._convert_ip_port(self._line_array[2]) 
+        self.local_host,self.local_port = SocketInfo._convert_ip_port(self._line_array[SocketInfo.LINE_INDEX_LOCAL_ADDRESS])
+        self.remote_host,self.remote_port = SocketInfo._convert_ip_port(self._line_array[SocketInfo.LINE_INDEX_REM_ADDRESS]) 
         self.is_loopback = SocketInfo._is_loopback(self.local_host)
 
         # Save rest of lookup for "lookup" methods, since expensive and info
@@ -194,9 +205,9 @@ class SocketInfo():
 
         # State
         if self.socket_type == "tcp":
-            self.state = SocketInfo._state_mappings[self._line_array[3]]
+            self.state = SocketInfo._state_mappings[self._line_array[SocketInfo.LINE_INDEX_ST]]
         else:
-            self.state = self.NA_STATE # "Not Applicable", for udp
+            self.state = SocketInfo.NA_STATE # "Not Applicable", for udp
 
         # Time
         self.update_time()
