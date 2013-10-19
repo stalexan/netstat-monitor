@@ -31,7 +31,6 @@ Variables:
 
 DEFAULT_MONITOR_INTERVAL -- How often Monitor collects netstat snapshots, in seconds.
 MIN_MONITOR_INTERVAL -- Minimum value for monitor interval.
-CLEAN_INTERVAL -- How often the list of connections is reset, in minutes.
 LOOKUP_REMOTE_HOST_NAME -- Whether to convert IP addresses to host names.
 
 """
@@ -53,7 +52,6 @@ __version__ = "1.1rc1"
 
 DEFAULT_MONITOR_INTERVAL = 1     # Number of seconds between each netstat.
 MIN_MONITOR_INTERVAL =     0.001 # Minimum value for monitor interval.
-CLEAN_INTERVAL =           5     # Number of minutes "seen" list grows before being cleaned out.
 
 LOOKUP_REMOTE_HOST_NAME = True # Whether to convert IP addresses to host names by doing a host name lookup.
 
@@ -152,8 +150,8 @@ class SocketInfo():
 
         # Determine fingerprint. 
         self.inode = self._line_array[SocketInfo.LINE_INDEX_INODE]
-        self.fingerprint = 'type:{0} inode:{1} local_address:{2} rem_address:{3}'.format(
-            self.socket_type, self.inode, 
+        self.fingerprint = 'type:{0} local_address:{1} rem_address:{2}'.format(
+            self.socket_type, 
             self._line_array[SocketInfo.LINE_INDEX_LOCAL_ADDRESS],
             self._line_array[SocketInfo.LINE_INDEX_REM_ADDRESS])
 
@@ -646,9 +644,6 @@ class Monitor():
         self._state_changes = state_changes
         self._seen = {}
 
-        self._clean_counter = 0
-        self._clean_interval = int(60 * CLEAN_INTERVAL / interval)
-
         self._netstat_id = 0
 
         # Check for root permissions, so filters work and connection details can be looked up.
@@ -740,25 +735,21 @@ class Monitor():
                 print(str(socket_info))
                 socket_info.was_displayed = True
 
-        # Display closed sockets.
-        if self._state_changes:
-            seen_values = list(self._seen.values())
-            for seen_info in seen_values:
-                if (seen_info.was_displayed and 
-                    seen_info.last_seen != self._netstat_id and
-                    not seen_info.is_closed()):
+        # Mark closed sockets and display.
+        seen_values = list(self._seen.values())
+        for seen_info in seen_values:
+            if seen_info.last_seen != self._netstat_id:
 
-                    # Mark closed. 
-                    seen_info.mark_closed()
+                # Mark closed. 
+                seen_info.mark_closed()
 
-                    # Update time.
+                # Display
+                if self._state_changes and seen_info.was_displayed:
                     seen_info.update_time()
-
-                    # Display
                     print(str(seen_info))
 
-                    # Remove from seen collection
-                    del self._seen[seen_info.fingerprint]
+                # Remove from seen collection
+                del self._seen[seen_info.fingerprint]
 
         sys.stdout.flush()
 
@@ -842,23 +833,6 @@ class Monitor():
         socket_info.record_last_seen(self._netstat_id)
         self._seen[socket_info.fingerprint] = socket_info
 
-    def _clean(self):
-        """Discard seen SocketInfos that have ended, if CLEAN_INTERVAL has elapsed."""
-        self._clean_counter += 1
-        if self._clean_counter >= self._clean_interval:
-            # LOG
-            #before_count = len(self._seen.keys())
-            keep = {}
-            for socket_info in self._seen.values():
-                if socket_info.last_seen == self._netstat_id:
-                    keep[socket_info.fingerprint] = socket_info
-            self._seen = keep
-            self._clean_counter = 0
-            # LOG
-            #after_count = len(self._seen.keys())
-            #print("clean: before {0}, after {1}".format(before_count, after_count))
-            #sys.stdout.flush()
-
     def monitor(self):
         """Perform a NetStat every monitor_interval seconds."""
         # Print header
@@ -867,7 +841,6 @@ class Monitor():
 
         while True:
             self._do_netstat()
-            self._clean()
             time.sleep(self._interval)
 
 def main():
