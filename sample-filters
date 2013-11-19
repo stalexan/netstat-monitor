@@ -1,3 +1,7 @@
+# Ignore connections to other machines on LAN.
+[ignore-lan]
+remote_ips: 192.168.1.0/24
+
 # Trusted exes
 [ntpupdate]
 exe: /usr/sbin/ntpdate

@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 #
-# Copyright 2012 Sean Alexandre
+# Copyright 2013 Sean Alexandre
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -40,6 +40,7 @@ import configparser
 import datetime
 import errno
 import glob
+import netaddr
 import os
 import platform
 import pwd
@@ -426,9 +427,9 @@ class SocketFilter():
 
 class GenericFilter(SocketFilter):
     """GenericFilter is a SocketFilter that filters on properties of SocketInfo."""
-    valid_parameter_names = ["pid", "exe", "cmdline", "cmdline_is_re", "user", "local_hosts", "local_ports", "remote_hosts", "remote_ports", "states"]
+    valid_parameter_names = ["pid", "exe", "cmdline", "cmdline_is_re", "user", "local_hosts", "local_ports", "remote_hosts", "remote_ips", "remote_ports", "states"]
 
-    def __init__(self, name, pid=None, exe=None, cmdline=None, cmdline_is_re=None, user=None, local_hosts=None, local_ports=None, remote_hosts=None, remote_ports=None, states=None):
+    def __init__(self, name, pid=None, exe=None, cmdline=None, cmdline_is_re=None, user=None, local_hosts=None, local_ports=None, remote_hosts=None, remote_ips=None, remote_ports=None, states=None):
         """Create a GenericFilter that filters out SocketInfos that match all the specified properties.
 
         All arguments are optional. Arguments that aren't set default to None, for "don't care." 
@@ -446,8 +447,10 @@ class GenericFilter(SocketFilter):
           out if its local_host matches any of the addresses.
         local_ports -- If set, an array of ports to filter on. A SocketInfo is filtered 
           out if its local_port matches any of the ports.
-        remote_hosts -- If set, an array of IP addresses to filter on. A SocketInfo is filtered 
-          out if its remote_host matches any of the addresses.
+        remote_hosts -- If set, an array of domain names to filter on. A SocketInfo is filtered 
+          out if its remote_host_name matches any of the addresses.
+        remote_ips -- If set, an array of IP address ranges to filter on, in CIDR notation. A 
+          SocketInfo is filtered out if its remote_host falls within any of the ranges. 
         remote_ports -- If set, an array of ports to filter on. A SocketInfo is filtered 
           out if its local_port matches any of the ports.
         states -- If set, an array of states to filter on. A SocketInfo is filtered 
@@ -463,6 +466,7 @@ class GenericFilter(SocketFilter):
         self.local_hosts = GenericFilter._parse_list_string(local_hosts)
         self.local_ports = GenericFilter._parse_list_string(local_ports)
         self.remote_hosts = GenericFilter._parse_list_string(remote_hosts)
+        self.remote_ips = GenericFilter._parse_list_string(remote_ips)
         self.remote_ports = GenericFilter._parse_list_string(remote_ports)
         self.states = GenericFilter._parse_list_string(states)
 
@@ -471,6 +475,10 @@ class GenericFilter(SocketFilter):
         if self.cmdline_is_re:
             self.cmdline_re = re.compile(self.cmdline)
 
+        # Parse CIDR address ranges
+        if not self.remote_ips is None:
+            self.remote_ips = [netaddr.IPNetwork(cidr_str) for cidr_str in self.remote_ips] 
+        
     @staticmethod
     def _parse_list_string(string):
         result = None
@@ -491,6 +499,7 @@ class GenericFilter(SocketFilter):
         self._add_str_part(parts, 'local_hosts')
         self._add_str_part(parts, 'local_ports')
         self._add_str_part(parts, 'remote_hosts')
+        self._add_str_part(parts, 'remote_ips')
         self._add_str_part(parts, 'remote_ports')
         self._add_str_part(parts, 'states')
         string = ''.join(parts)
@@ -556,8 +565,8 @@ class GenericFilter(SocketFilter):
             filter_out = socket_info.local_port in self.local_ports
         return filter_out
 
-    def _remote_host_filters_out(self, socket_info):
-        """Return True if socket_info should be filtered out based on remote_host."""
+    def _remote_host_name_filters_out(self, socket_info):
+        """Return True if socket_info should be filtered out based on remote_host_name."""
         filter_out = True
         if not self.remote_hosts is None:
             host_name = socket_info.lookup_remote_host_name()
@@ -565,6 +574,23 @@ class GenericFilter(SocketFilter):
                 if host_name.endswith(host):
                     filter_out = True
                     break
+        return filter_out
+
+    def _ip_in_a_network(self, ip, networks):
+        """Return True if ip is in at least one network."""
+        in_range = False
+        ip_addr = netaddr.IPAddress(ip)
+        for network in networks:
+            if ip_addr in network:
+                in_range = True
+                break
+        return in_range
+
+    def _remote_ip_filters_out(self, socket_info):
+        """Return True if socket_info should be filtered out based on remote_host IP address."""
+        filter_out = True
+        if not self.remote_ips is None:
+            filter_out = self._ip_in_a_network(socket_info.remote_host, self.remote_ips)
         return filter_out
 
     def _remote_port_filters_out(self, socket_info):
@@ -583,6 +609,16 @@ class GenericFilter(SocketFilter):
 
     def filter_out(self, socket_info):
         """Return True if socket_info should be filtered out."""
+
+        # Consider each parameter for this filter. All parameters have to match
+        # a socket for the socket to be filtered out. The below "filters_out()"
+        # calls stop as soon as a particular filter parameter doesn't match 
+        # (i.e. the filter can't apply).
+        #
+        # Methods for all parameters are called. If a given parameter is not
+        # set, the "filters_out()" method for that parameter will always return
+        # true.  This can be thought of as the parameter being set for the
+        # filter, but set in such a way that a socket always matches.
         filter_out = (
             self._pid_filters_out(socket_info) and 
             self._exe_filters_out(socket_info) and 
@@ -590,9 +626,11 @@ class GenericFilter(SocketFilter):
             self._user_filters_out(socket_info) and 
             self._local_host_filters_out(socket_info) and
             self._local_port_filters_out(socket_info) and
-            self._remote_host_filters_out(socket_info) and
+            self._remote_host_name_filters_out(socket_info) and
+            self._remote_ip_filters_out(socket_info) and
             self._remote_port_filters_out(socket_info) and
             self._state_filters_out(socket_info))
+
         return filter_out
 
 class NetStat():
@@ -710,6 +748,8 @@ class Monitor():
                         #print("filter: {0}".format(generic_filter))
                         #sys.stdout.flush()
                     except configparser.Error as ex:
+                        raise MonitorException("ERROR: Parsing error creating {0} filter from file {1}: {2}.".format(section, file_name, str(ex)))
+                    except netaddr.core.AddrFormatError as ex:
                         raise MonitorException("ERROR: Parsing error creating {0} filter from file {1}: {2}.".format(section, file_name, str(ex)))
             except IOError as ex:
                 raise MonitorException("ERROR: Unable to open file {0}: ({1})".format(file_name, str(ex)))

@@ -26,7 +26,7 @@ Extract files:
 Install, on a Debian or Ubuntu machine:
 
     $ sudo apt-get update
-    $ sudo apt-get install python3
+    $ sudo apt-get install python3 python3-netaddr
     $ sudo python3 setup.py install
 
 This will install the netstat-monitor exe to /usr/local/bin/ and the netstat.py module to /usr/local/lib/python3.2/dist-packages/.
@@ -73,6 +73,9 @@ The file [sample-filters](https://github.com/stalexan/netstat-monitor/blob/maste
     user: root
     states = FIN_WAIT1, FIN_WAIT2, TIME_WAIT, CLOSE, CLOSE_WAIT, LAST_ACK, CLOSING
 
+    [ignore-lan]
+    remote_ips: 192.168.1.0/24  
+
 Each section defines a new filter. A section starts with the filter name, enclosed in square brackets. The name can be any alphanumeric string. Each line after that defines a filter parameter. For example, the first section defines a filter called ntpupdate that has two parameters: exe and user. This filter will look for connections with exe set to /usr/sbin/ntpupdate and user set to root. Any connections with these settings will be filtered out, and not displayed.
 
 The available filter parameters are:
@@ -84,7 +87,8 @@ The available filter parameters are:
 * user: The user for the process that opened the connection.
 * local_hosts: Comma separated list of local hosts.
 * local_ports: Comma separated list of local ports.
-* remote_hosts: Comma separated list of remote hosts.
+* remote_hosts: Comma separated list of remote hosts, specified with domain names. 
+* remote_ips: Comma separated list of IP address ranges, in CIDR notation.
 * remote_ports: Comma separated list of remote ports.
 * states: Comma separated list of Connection states.
 
