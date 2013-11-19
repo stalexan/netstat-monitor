@@ -49,7 +49,7 @@ import socket
 import sys
 import time
 
-__version__ = "v1.1.0"
+__version__ = "v1.1.1"
 
 DEFAULT_MONITOR_INTERVAL = 1     # Number of seconds between each netstat.
 MIN_MONITOR_INTERVAL =     0.001 # Minimum value for monitor interval.
