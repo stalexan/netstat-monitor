@@ -33,6 +33,8 @@ This will install the netstat-monitor exe to /usr/local/bin/ and the netstat.py 
 
 Another option, instead of doing an install, is to just run netstat-monitor directly from where the files were extracted.
 
+Also, tarballs are available here: https://www.alexan.org/netstat-monitor
+
 ## Running
 
 To run:
