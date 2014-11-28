@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 #
-# Copyright 2013 Sean Alexandre
+# Copyright 2014 Sean Alexandre
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -49,7 +49,7 @@ import socket
 import sys
 import time
 
-__version__ = "v1.1.1"
+__version__ = "v1.1.2"
 
 DEFAULT_MONITOR_INTERVAL = 1     # Number of seconds between each netstat.
 MIN_MONITOR_INTERVAL =     0.001 # Minimum value for monitor interval.
@@ -59,7 +59,7 @@ LOOKUP_REMOTE_HOST_NAME = True # Whether to convert IP addresses to host names b
 PROC_TCP = "/proc/net/tcp"
 PROC_UDP = "/proc/net/udp"
 
-TESTED_KERNEL = "3.2.0"
+TESTED_KERNEL = "3.17.2"
 
 class MonitorException(Exception):
     def __init__(self, message, return_code=-1):
@@ -136,15 +136,22 @@ class SocketInfo():
     LINE_INDEX_UID              = 7
     LINE_INDEX_INODE            = 9
 
-    def __init__(self, socket_type, line):
+    def __init__(self): pass
+
+    @staticmethod
+    def _create_from_line(socket_type, line):
         """Create a SocketInfo of type socket_type from line.
 
         Keyword arguments:
         socket_type -- tcp or udp
         line -- line from either /proc/net/tcp or /proc/net/udp
-        monitor -- Monitor instance used to filter and report SocketInfo instances. Optional.
 
         """
+        info = SocketInfo()
+        info.__create_from_line(socket_type, line)
+        return info
+
+    def __create_from_line(self, socket_type, line):
         self.socket_type = socket_type
 
         self.record_line(line)
@@ -161,6 +168,28 @@ class SocketInfo():
         self.last_seen = 0
 
         self.was_displayed = False
+
+    @staticmethod
+    def _create_from_params(user=None, exe=None, cmdline=None, local_host=None, local_port=None,
+        remote_host=None, remote_host_name=None, remote_port=None, state=None):
+        """Create a SocketInfo using explicit parameters, for filter unit testing.
+        """
+        info = SocketInfo()
+        info.__create_from_explicit_params(user, exe, cmdline, local_host, local_port, 
+            remote_host, remote_host_name, remote_port, state)
+        return info
+
+    def __create_from_explicit_params(self, user, exe, cmdline, local_host, local_port,
+        remote_host, remote_host_name, remote_port, state):
+        self._user = user
+        self._exe = exe
+        self._cmdline = cmdline
+        self.local_host = local_host
+        self.local_port = local_port
+        self.remote_host = remote_host
+        self._remote_host_name = remote_host_name
+        self.remote_port = remote_port
+        self.state = state
 
     def finish_initializing(self):
         """Finish initializing. Only needed if this SocketInfo will be kept."""
@@ -197,7 +226,6 @@ class SocketInfo():
         """Records line for this socket from /proc."""
         self.line = line
         self._line_array = SocketInfo._remove_empty(line.split(' '))
-
 
     def update_dynamic_attrs(self):
         """Lookup attributes that change over time."""
@@ -250,7 +278,7 @@ class SocketInfo():
                 self._pid = self._pid.strip()
             self._pid_looked_up = True
         return self._pid
-    
+
     def lookup_exe(self):
         """Lookup exe from pid."""
         if self._exe is None:
@@ -654,7 +682,7 @@ class NetStat():
 
         # Create SocketInfos. 
         for line in content:
-            info = SocketInfo(socket_type, line)
+            info = SocketInfo._create_from_line(socket_type, line)
             self.socket_infos.append(info)
 
 class Monitor():

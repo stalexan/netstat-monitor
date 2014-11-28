@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 #
-# Copyright 2012 Sean Alexandre
+# Copyright 2014 Sean Alexandre
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as published by
@@ -16,6 +16,9 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import unittest
+import sys
+
+sys.path.append('..')
 from netstat import *
 
 # Open debug output file
@@ -58,17 +61,134 @@ class TestSocketInfo(unittest.TestCase):
         268: 0100007F:0035 00000000:0000 07 00000000:00000000 00:00000000 00000000     0        0 139165 2 0000000000000000 0        
         """
         line = "268: 0100007F:0035 00000000:0000 07 00000000:00000000 00:00000000 00000000     0        0 139165 2 0000000000000000 0"
-        info = SocketInfo("tcp", line)
+        info = SocketInfo._create_from_line("tcp", line)
         info.finish_initializing()
         self.assertEqual(info.state, "CLOSE")
         self.assertEqual(info.local_host, "127.0.0.1")
         self.assertEqual(info.local_port, "53")
-        self.assertEqual(info.fingerprint, "tcp 268 139165")
+        self.assertEqual(info.fingerprint, "type:tcp local_address:0100007F:0035 rem_address:00000000:0000")
+
+    def setUp(self): pass
+
+class TestFilters(unittest.TestCase):
+    def test_filter_exe(self):
+        # Test match
+        filter = GenericFilter("test", exe="/usr/sbin/ntpd")
+        socket_info = SocketInfo._create_from_params(exe="/usr/sbin/ntpd")
+        self.assertTrue(filter.filter_out(socket_info))
+
+        # Test mismatch
+        socket_info = SocketInfo._create_from_params(exe="/usr/sbin/ntpd2")
+        self.assertFalse(filter.filter_out(socket_info))
+
+    def test_filter_cmdline(self):
+        # Test match
+        filter = GenericFilter("test", cmdline="/usr/bin/mpop -Q account1")
+        socket_info = SocketInfo._create_from_params(cmdline="/usr/bin/mpop -Q account1")
+        self.assertTrue(filter.filter_out(socket_info))
+
+        # Test mismatch
+        socket_info = SocketInfo._create_from_params(cmdline="/usr/bin/mpop")
+        self.assertFalse(filter.filter_out(socket_info))
+
+    def test_filter_cmdline_is_re(self):
+        # Test match
+        filter = GenericFilter("test", cmdline="/usr/bin/[^ ]* -Q account1", cmdline_is_re=True)
+        socket_info = SocketInfo._create_from_params(cmdline="/usr/bin/boop -Q account1")
+        self.assertTrue(filter.filter_out(socket_info))
+
+        # Test mismatch
+        socket_info = SocketInfo._create_from_params(cmdline="/usr/bin/boop -R account1")
+        self.assertFalse(filter.filter_out(socket_info))
+
+    def test_filter_user(self):
+        # Test match
+        filter = GenericFilter("test", user="root")
+        socket_info = SocketInfo._create_from_params(user="root")
+        self.assertTrue(filter.filter_out(socket_info))
+
+        # Test mismatch
+        socket_info = SocketInfo._create_from_params(user="www-data")
+        self.assertFalse(filter.filter_out(socket_info))
+
+
+    def test_filter_local_hosts(self):
+        # Test match
+        filter = GenericFilter("test", local_hosts="127.0.0.1")
+        socket_info = SocketInfo._create_from_params(local_host="127.0.0.1")
+        self.assertTrue(filter.filter_out(socket_info))
+
+        # Test mismatch
+        socket_info = SocketInfo._create_from_params(local_host="128.0.0.1")
+        self.assertFalse(filter.filter_out(socket_info))
+
+    def test_filter_local_ports(self):
+        # Test match
+        filter = GenericFilter("test", local_ports="1234,5432,6789")
+        socket_info = SocketInfo._create_from_params(local_port="1234")
+        self.assertTrue(filter.filter_out(socket_info))
+        socket_info = SocketInfo._create_from_params(local_port="6789")
+        self.assertTrue(filter.filter_out(socket_info))
+
+        # Test mismatch
+        socket_info = SocketInfo._create_from_params(local_port="5555")
+        self.assertFalse(filter.filter_out(socket_info))
+
+    def test_filter_remote_hosts(self):
+        # Test match
+        filter = GenericFilter("test", remote_hosts="www.somedomain.net,anotherdomain.com,www.andanother.org")
+        socket_info = SocketInfo._create_from_params(remote_host_name="www.somedomain.net")
+        self.assertTrue(filter.filter_out(socket_info))
+        socket_info = SocketInfo._create_from_params(remote_host_name="www.andanother.org")
+        self.assertTrue(filter.filter_out(socket_info))
+
+        # Test mismatch
+        socket_info = SocketInfo._create_from_params(remote_host_name="www.somedomain2.net")
+        self.assertFalse(filter.filter_out(socket_info))
+
+    def test_filter_remote_ips(self):
+        # Test match
+        filter = GenericFilter("test", remote_ips="40.50.60.70,23.24.25.26,77.78.79.0/24")
+        socket_info = SocketInfo._create_from_params(remote_host="23.24.25.26")
+        self.assertTrue(filter.filter_out(socket_info))
+        socket_info = SocketInfo._create_from_params(remote_host="77.78.79.80")
+        self.assertTrue(filter.filter_out(socket_info))
+
+        # Test mismatch
+        socket_info = SocketInfo._create_from_params(remote_host="77.78.80.80")
+        self.assertFalse(filter.filter_out(socket_info))
+
+    def test_filter_remote_ports(self):
+        # Test match
+        filter = GenericFilter("test", remote_ports="1234,5432,6789")
+        socket_info = SocketInfo._create_from_params(remote_port="1234")
+        self.assertTrue(filter.filter_out(socket_info))
+        socket_info = SocketInfo._create_from_params(remote_port="6789")
+        self.assertTrue(filter.filter_out(socket_info))
+
+        # Test mismatch
+        socket_info = SocketInfo._create_from_params(remote_port="5555")
+        self.assertFalse(filter.filter_out(socket_info))
+
+    def test_filter_state(self):
+        # Test match
+        filter = GenericFilter("test", states="SYN_SENT,ESTABLISHED")
+        socket_info = SocketInfo._create_from_params(state="ESTABLISHED")
+        self.assertTrue(filter.filter_out(socket_info))
+
+        # Test mismatch
+        socket_info = SocketInfo._create_from_params(state="CLOSED")
+        self.assertFalse(filter.filter_out(socket_info))
 
     def setUp(self): pass
 
 def main():
+    # TestSocketInfo
     suite = unittest.TestLoader().loadTestsFromTestCase(TestSocketInfo)
+    unittest.TextTestRunner(verbosity=3).run(suite)
+
+    # TestFilters
+    suite = unittest.TestLoader().loadTestsFromTestCase(TestFilters)
     unittest.TextTestRunner(verbosity=3).run(suite)
 
 if __name__ == '__main__':
