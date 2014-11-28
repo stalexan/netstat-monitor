@@ -579,6 +579,7 @@ class GenericFilter(SocketFilter):
         """Return True if socket_info should be filtered out based on local_host."""
         filter_out = True
         if not self.local_hosts is None:
+            filter_out = False
             host_name = socket_info.local_host
             for host in self.local_hosts:
                 if host_name.endswith(host):
@@ -597,6 +598,7 @@ class GenericFilter(SocketFilter):
         """Return True if socket_info should be filtered out based on remote_host_name."""
         filter_out = True
         if not self.remote_hosts is None:
+            filter_out = False
             host_name = socket_info.lookup_remote_host_name()
             for host in self.remote_hosts:
                 if host_name.endswith(host):
