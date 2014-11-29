@@ -26,7 +26,7 @@ Extract files:
 Install, on a Debian or Ubuntu machine:
 
     $ sudo apt-get update
-    $ sudo apt-get install python3 python3-netaddr
+    $ sudo apt-get install python3 python3-netaddr python3-ipaddr
     $ sudo python3 setup.py install
 
 This will install the netstat-monitor exe to /usr/local/bin/ and the netstat.py module to /usr/local/lib/python3.2/dist-packages/.

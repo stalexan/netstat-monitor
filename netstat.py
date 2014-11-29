@@ -36,10 +36,12 @@ LOOKUP_REMOTE_HOST_NAME -- Whether to convert IP addresses to host names.
 """
 
 import argparse
+import binascii
 import configparser
 import datetime
 import errno
 import glob
+import ipaddr
 import netaddr
 import os
 import platform
@@ -49,7 +51,7 @@ import socket
 import sys
 import time
 
-__version__ = "v1.1.2"
+__version__ = "v1.1.3"
 
 DEFAULT_MONITOR_INTERVAL = 1     # Number of seconds between each netstat.
 MIN_MONITOR_INTERVAL =     0.001 # Minimum value for monitor interval.
@@ -57,7 +59,9 @@ MIN_MONITOR_INTERVAL =     0.001 # Minimum value for monitor interval.
 LOOKUP_REMOTE_HOST_NAME = True # Whether to convert IP addresses to host names by doing a host name lookup.
 
 PROC_TCP = "/proc/net/tcp"
+PROC_TCP6 = "/proc/net/tcp6"
 PROC_UDP = "/proc/net/udp"
+PROC_UDP6 = "/proc/net/udp6"
 
 TESTED_KERNEL = "3.17.2"
 
@@ -117,12 +121,6 @@ class SocketInfo():
          '04' : 'FIN_WAIT1',    '05' : 'FIN_WAIT2',     '06' : 'TIME_WAIT', 
          '07' : 'CLOSE',        '08' : 'CLOSE_WAIT',    '09' : 'LAST_ACK', 
          '0A' : 'LISTEN',       '0B' : 'CLOSING' }
-
-    _private_regex = [ re.compile(ex) for ex in [
-        '^127.\d{1,3}.\d{1,3}.\d{1,3}$',
-        '^10.\d{1,3}.\d{1,3}.\d{1,3}$',
-        '^192.168.\d{1,3}$',
-        '172.(1[6-9]|2[0-9]|3[0-1]).[0-9]{1,3}.[0-9]{1,3}$']]
 
     _next_uid = 1
 
@@ -206,7 +204,7 @@ class SocketInfo():
         # Addresses
         self.local_host,self.local_port = SocketInfo._convert_ip_port(self._line_array[SocketInfo.LINE_INDEX_LOCAL_ADDRESS])
         self.remote_host,self.remote_port = SocketInfo._convert_ip_port(self._line_array[SocketInfo.LINE_INDEX_REM_ADDRESS]) 
-        self.is_loopback = SocketInfo._is_loopback(self.local_host)
+        self.is_loopback = SocketInfo._is_ip_addr_loopback(self.local_host)
 
         # Save rest of lookup for "lookup" methods, since expensive and info
         # may not be needed if filtered out.
@@ -241,13 +239,6 @@ class SocketInfo():
 
     def update_time(self):
         self.time = datetime.datetime.now();
-
-    @staticmethod
-    def _is_loopback(addr):
-        """Determine if IP address addr is localhost."""
-        # TODO: Do an ifconfig to lookup loopback address at runtime, instead of hardcoding here.
-        is_loopback = addr == "127.0.0.1"
-        return is_loopback
 
     def has_been_reported(self):
         """Return True if this socket has been reported to user."""
@@ -306,7 +297,7 @@ class SocketInfo():
     def lookup_remote_host_name(self):
         """Lookup remote host name from IP address."""
         if self._remote_host_name is None:
-            if SocketInfo._is_ip_addr_private(self.remote_host):
+            if SocketInfo._is_ip_addr_private(self.remote_host) or SocketInfo._is_ip_addr_loopback(self.remote_host):
                 self._remote_host_name = self.remote_host
             else:
                 try:
@@ -352,14 +343,16 @@ class SocketInfo():
         return string
 
     @staticmethod
-    def _is_ip_addr_private(addr):
+    def _is_ip_addr_private(addr_str):
         """Determine if IP address addr is a private address."""
-        is_private = False
-        for regex in SocketInfo._private_regex:
-            if regex.match(addr):
-                is_private = True
-                break
-        return is_private
+        addr = ipaddr.IPAddress(addr_str)
+        return addr.is_private
+
+    @staticmethod
+    def _is_ip_addr_loopback(addr_str):
+        """Determine if IP address addr is localhost."""
+        addr = ipaddr.IPAddress(addr_str)
+        return addr.is_loopback
     
     @staticmethod
     def _hex2dec(hex_str):
@@ -369,13 +362,40 @@ class SocketInfo():
     @staticmethod
     def _ip(hex_str):
         """Convert IP address hex_str from hex format (e.g. "293DA83F") to decimal format (e.g. "64.244.27.136")."""
-        dec_array = [
-            SocketInfo._hex2dec(hex_str[6:8]), 
-            SocketInfo._hex2dec(hex_str[4:6]), 
-            SocketInfo._hex2dec(hex_str[2:4]), 
-            SocketInfo._hex2dec(hex_str[0:2])
-        ]
-        dec_str = '.'.join(dec_array)
+        if (len(hex_str) == 8): # This is an IPv4 address.
+            # Reverse order of bytes; e.g. A0B1C2D3 becomes D3C2B1A0
+            rev = "".join(reversed([hex_str[ii:ii+2] for ii in range(0, len(hex_str), 2)]))
+
+            # Convert Unicode string in to UTF-8 string.
+            utf = rev.encode()
+
+            # Turn string into its binary equivalent.
+            binary = binascii.unhexlify(utf)
+
+            # Turn address into its dotted quad equivalent. 
+            dec_str = socket.inet_ntoa(binary)
+        elif (len(hex_str) == 32): # This is an IPv6 address.
+            # Reverse order of bytes in each 4 byte word; e.g. 
+            #     B80D0120 00000000 67452301 EFCDAB89
+            # becomes
+            #     20010DB8 00000000 01234567 89ABCDEF
+            #     20010DB8000000000123456789ABCDEF
+            # for the IPv6 address
+            #     2001:db8::0123:4567:89ab:cdef
+            rev = "".join(
+                list(reversed([hex_str[ii:ii+2] for ii in range(0, 7, 2)])) +
+                list(reversed([hex_str[ii:ii+2] for ii in range(8, 15, 2)])) +
+                list(reversed([hex_str[ii:ii+2] for ii in range(16, 23, 2)])) +
+                list(reversed([hex_str[ii:ii+2] for ii in range(24, 31, 2)])))
+
+            # Add colons
+            colons = ":".join(rev[ii:ii+4] for ii in range(0, len(rev), 4))
+            
+            # Shorten address, if possible.
+            addr = ipaddr.IPv6Address(colons)
+            dec_str = str(addr)
+        else:
+            raise MonitorException("ERROR: Invalid IP address {0}".format(hex_str))
         return dec_str
     
     @staticmethod
@@ -387,7 +407,9 @@ class SocketInfo():
     def _convert_ip_port(hexaddr):
         """Convert IP address and port from hex to decimal; e.g. "293DA83F:0050" to ["64.244.27.136", "80"]."""
         host,port = hexaddr.split(':')
-        return SocketInfo._ip(host),SocketInfo._hex2dec(port)
+        host_converted = SocketInfo._ip(host)
+        port_converted = SocketInfo._hex2dec(port)
+        return host_converted,port_converted
     
     @staticmethod
     def _get_pid_of_inode(inode):
@@ -672,7 +694,9 @@ class NetStat():
 
         # Load sockets 
         self.socket_infos = []
+        self._load('tcp', PROC_TCP6)
         self._load('tcp', PROC_TCP)
+        self._load('udp', PROC_UDP6)
         self._load('udp', PROC_UDP)
 
     def _load(self, socket_type, path):

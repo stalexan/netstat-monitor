@@ -15,6 +15,7 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import netaddr
 import unittest
 import sys
 
@@ -44,16 +45,26 @@ class TestSocketInfo(unittest.TestCase):
 
     def test_parsing_ip(self):
         self.assertEqual(SocketInfo._ip("FFFFFFFF"), "255.255.255.255")
-        self.assertRaises(ValueError, SocketInfo._ip, "0")
+        self.assertRaises(MonitorException, SocketInfo._ip, "0")
         self.assertEqual(SocketInfo._ip("293DA8DF"), "223.168.61.41")
+
+    def test_parsing_ip6(self):
+        self.assertEqual(
+            netaddr.IPAddress(SocketInfo._ip("B90D01200000000067452301EFCDAB89")), 
+            netaddr.IPAddress("2001:db9::0123:4567:89ab:cdef"))
 
     def test_parsing_ip_port(self):
         self.assertEqual(SocketInfo._convert_ip_port("293DA8DF:0050"), ("223.168.61.41", "80"))
 
     def test_parsing_is_ip_addr_private(self):
-        self.assertEqual(SocketInfo._is_ip_addr_private("127.0.0.1"), True)
         self.assertEqual(SocketInfo._is_ip_addr_private("172.27.0.30"), True)
+        self.assertEqual(SocketInfo._is_ip_addr_private("fde4:8dba:82e1::1"), True)
         self.assertEqual(SocketInfo._is_ip_addr_private("74.125.224.194"), False)
+        self.assertEqual(SocketInfo._is_ip_addr_private("2001:db9::0123:4567:89ab:cdef"), False)
+
+    def test_parsing_is_ip_addr_loopback(self):
+        self.assertEqual(SocketInfo._is_ip_addr_loopback("127.0.0.1"), True)
+        self.assertEqual(SocketInfo._is_ip_addr_loopback("::1"), True)
 
     def test_construct(self):
         """
@@ -182,7 +193,7 @@ class TestFilters(unittest.TestCase):
 
     def setUp(self): pass
 
-def main():
+def runAllTests():
     # TestSocketInfo
     suite = unittest.TestLoader().loadTestsFromTestCase(TestSocketInfo)
     unittest.TextTestRunner(verbosity=3).run(suite)
@@ -190,6 +201,19 @@ def main():
     # TestFilters
     suite = unittest.TestLoader().loadTestsFromTestCase(TestFilters)
     unittest.TextTestRunner(verbosity=3).run(suite)
+
+def runSpecificTests():
+    suite = unittest.TestSuite()
+
+    #suite.addTest(TestSocketInfo('test_construct'))
+    suite.addTest(TestSocketInfo('test_parsing_ip6'))
+    #suite.addTest(TestSocketInfo('test_parsing_ip_port'))
+
+    unittest.TextTestRunner(verbosity=3).run(suite)
+
+def main():
+    runAllTests()
+    #runSpecificTests()
 
 if __name__ == '__main__':
     main()
