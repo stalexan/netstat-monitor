@@ -379,7 +379,6 @@ class SocketInfo():
             #     B80D0120 00000000 67452301 EFCDAB89
             # becomes
             #     20010DB8 00000000 01234567 89ABCDEF
-            #     20010DB8000000000123456789ABCDEF
             # for the IPv6 address
             #     2001:db8::0123:4567:89ab:cdef
             rev = "".join(
@@ -392,8 +391,13 @@ class SocketInfo():
             colons = ":".join(rev[ii:ii+4] for ii in range(0, len(rev), 4))
             
             # Shorten address, if possible.
-            addr = ipaddr.IPv6Address(colons)
-            dec_str = str(addr)
+            is_actually_ipv4 = colons[:29] == "0000:0000:0000:0000:0000:FFFF"
+            if (is_actually_ipv4):
+                octets = [colons[30:32], colons[32:34], colons[35:37], colons[37:39]]
+                dec_str = ".".join([str(int(octet, 16)) for octet in octets])
+            else:
+                addr = ipaddr.IPv6Address(colons)
+                dec_str = str(addr)
         else:
             raise MonitorException("ERROR: Invalid IP address {0}".format(hex_str))
         return dec_str

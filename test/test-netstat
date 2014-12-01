@@ -52,7 +52,8 @@ class TestSocketInfo(unittest.TestCase):
         self.assertEqual(
             netaddr.IPAddress(SocketInfo._ip("B90D01200000000067452301EFCDAB89")), 
             netaddr.IPAddress("2001:db9::0123:4567:89ab:cdef"))
-
+        self.assertEqual(SocketInfo._ip("0000000000000000FFFF00000100007F"), "127.0.0.1")
+            
     def test_parsing_ip_port(self):
         self.assertEqual(SocketInfo._convert_ip_port("293DA8DF:0050"), ("223.168.61.41", "80"))
 
