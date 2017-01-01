@@ -41,7 +41,7 @@ import configparser
 import datetime
 import errno
 import glob
-import ipaddr
+import ipaddress
 import netaddr
 import os
 import platform
@@ -345,13 +345,13 @@ class SocketInfo():
     @staticmethod
     def _is_ip_addr_private(addr_str):
         """Determine if IP address addr is a private address."""
-        addr = ipaddr.IPAddress(addr_str)
+        addr = ipaddress.ip_address(addr_str)
         return addr.is_private
 
     @staticmethod
     def _is_ip_addr_loopback(addr_str):
         """Determine if IP address addr is localhost."""
-        addr = ipaddr.IPAddress(addr_str)
+        addr = ipaddress.ip_address(addr_str)
         return addr.is_loopback
     
     @staticmethod
@@ -396,7 +396,7 @@ class SocketInfo():
                 octets = [colons[30:32], colons[32:34], colons[35:37], colons[37:39]]
                 dec_str = ".".join([str(int(octet, 16)) for octet in octets])
             else:
-                addr = ipaddr.IPv6Address(colons)
+                addr = ipaddress.IPv6Address(colons)
                 dec_str = str(addr)
         else:
             raise MonitorException("ERROR: Invalid IP address {0}".format(hex_str))
