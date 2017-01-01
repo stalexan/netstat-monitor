@@ -195,26 +195,42 @@ class TestFilters(unittest.TestCase):
     def setUp(self): pass
 
 def runAllTests():
+    passed = True
     # TestSocketInfo
     suite = unittest.TestLoader().loadTestsFromTestCase(TestSocketInfo)
-    unittest.TextTestRunner(verbosity=3).run(suite)
+    ret = unittest.TextTestRunner(verbosity=3).run(suite)
+    if not ret.wasSuccessful():
+        passed = False
 
     # TestFilters
     suite = unittest.TestLoader().loadTestsFromTestCase(TestFilters)
-    unittest.TextTestRunner(verbosity=3).run(suite)
+    ret = unittest.TextTestRunner(verbosity=3).run(suite)
+    if not ret.wasSuccessful():
+        passed = False
+
+    return passed
 
 def runSpecificTests():
+    passed = True
     suite = unittest.TestSuite()
 
     #suite.addTest(TestSocketInfo('test_construct'))
     suite.addTest(TestSocketInfo('test_parsing_ip6'))
     #suite.addTest(TestSocketInfo('test_parsing_ip_port'))
 
-    unittest.TextTestRunner(verbosity=3).run(suite)
+    ret = unittest.TextTestRunner(verbosity=3).run(suite)
+    if not ret.wasSuccessful():
+        passed = False
+
+    return passed
 
 def main():
-    runAllTests()
-    #runSpecificTests()
+    passed = runAllTests()
+    #passed = runSpecificTests()
+    if passed:
+        sys.exit()
+    else:
+        sys.exit("Test(s) failed!")
 
 if __name__ == '__main__':
     main()
