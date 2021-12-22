@@ -1,6 +1,4 @@
-=============================================================
-Netstat-monitor -- Monitor network connections on your system
-=============================================================
+# Netstat-monitor -- Monitor network connections on your system
 
 ## Description
 
