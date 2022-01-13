@@ -7,31 +7,25 @@ Netstat-monitor is a command line tool for monitoring network connections. Its o
 ## Installation
 
 Netstat-monitor has been tested on Debian based distros based on the Linux 3.2 kernel; 
-specifically: Ubuntu 12.04 and Debian 7.0 (Wheezy). It may work on other distros, if the
-format of the /proc filespace is the same. But, this hasn't been tested.
+specifically: Ubuntu 12.04 and Debian 7.0 (Wheezy).
 
 To get the latest version:
 
-    $ rm -rf /tmp/stalexan-netstat-monitor-*
-    $ wget -O /tmp/netstat-monitor-last.tgz https://github.com/stalexan/netstat-monitor/tarball/master
+    $ wget -O /tmp/netstat-monitor.tar.gz https://github.com/stalexan/netstat-monitor/tarball/master
 
-Extract files:
+To install using pip:
 
+    $ pip install /tmp/netstat-monitor.tar.gz
+
+Or to run directly without installing, on a Debian based distro:
+
+    $ sudo apt-get install python3-netaddr
     $ cd /tmp
-    $ tar zxvf netstat-monitor-last.tgz
-    $ cd stalexan-netstat-monitor-*
+    $ tar xvzf netstat-monitor.tar.gz
+    $ cd netstat-monitor-*
+    $ ./netstat-monitor
 
-Install, on a Debian or Ubuntu machine:
-
-    $ sudo apt-get update
-    $ sudo apt-get install python3 python3-netaddr
-    $ sudo python3 setup.py install
-
-This will install the netstat-monitor exe to /usr/local/bin/ and the netstat.py module to /usr/local/lib/python3.2/dist-packages/.
-
-Another option, instead of doing an install, is to just run netstat-monitor directly from where the files were extracted.
-
-Also, tarballs are available here: https://www.alexan.org/netstat-monitor
+The tarballs are also available here: https://www.alexan.org/netstat-monitor
 
 ## Running
 
