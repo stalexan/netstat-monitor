@@ -26,6 +26,7 @@ import ipaddress
 import os
 import pwd
 import socket
+from typing import ClassVar, Optional
 
 # Local imports
 from .shared import MonitorException
@@ -56,7 +57,7 @@ class SocketInfo():
       or /proc/net/udp)
     inode -- The inode for the socket.
     fingerprint -- A fingerprint, or hash value, for the SocketInfo.
-    uid -- Unique id for this socket.
+    info_id -- Unique id for this socket.
     state -- The socket state; e.g. SYN_SENT, ESTABLISHED, etc.
     time -- When SocketInfo was created.
     last_seen -- When this SocketInfo was last seen.
@@ -70,60 +71,91 @@ class SocketInfo():
     lookup_exe(), lookup_cmdline(), and lookup_remote_host_name().
     """
 
-    UNDEFINED_STATE = 'UNDEFINED'
-    CLOSED_STATE = 'CLOSED'
-    NA_STATE = ''
+    # TODO2: doc instance attributes
 
-    _state_mappings = {
+    # These are set explicitly.
+    socket_type: str
+    _info_id: int # Unique ID for this SocketInfo
+    fingerprint: str
+    is_loopback: bool
+    last_seen: int
+    was_displayed: bool
+    time: datetime.datetime
+
+    # Lookup for these comes from lines in /proc/net/tcp and /proc/net/udp.
+    line: str
+    _line_array: list[str]
+    inode: str
+    _user_id: str
+    local_host: str
+    local_port: str
+    remote_host: str
+    remote_port: str
+    state: str
+
+    # Lookup is deferred for these.
+    _cmdline: Optional[str]
+    _exe: Optional[str]
+    _pid: Optional[str]
+    _pid_looked_up: bool
+    _remote_host_name: Optional[str]
+    _user_name: Optional[str]
+
+    UNDEFINED_STATE: ClassVar[str] = 'UNDEFINED'
+    CLOSED_STATE: ClassVar[str] = 'CLOSED'
+    NA_STATE: ClassVar[str] = ''
+
+    _state_mappings: dict[str, str] = {
          '01' : 'ESTABLISHED',  '02' : 'SYN_SENT',      '03' : 'SYN_RECV',
          '04' : 'FIN_WAIT1',    '05' : 'FIN_WAIT2',     '06' : 'TIME_WAIT',
          '07' : 'CLOSE',        '08' : 'CLOSE_WAIT',    '09' : 'LAST_ACK',
          '0A' : 'LISTEN',       '0B' : 'CLOSING' }
 
-    _next_uid = 1
+    _next_info_id: int = 1
 
     # pylint: disable=line-too-long
     # Indicies into fields of lines from /proc/net file
     # Example:
     # sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
     # 0:  0100007F:0019 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 7369 1 ffff8801186bc040 100 0 0 10 -1
-    LINE_INDEX_LOCAL_ADDRESS    = 1
-    LINE_INDEX_REM_ADDRESS      = 2
-    LINE_INDEX_ST               = 3
-    LINE_INDEX_UID              = 7
-    LINE_INDEX_INODE            = 9
+    LINE_INDEX_LOCAL_ADDRESS: int    = 1
+    LINE_INDEX_REM_ADDRESS: int      = 2
+    LINE_INDEX_ST: int               = 3
+    LINE_INDEX_UID: int              = 7
+    LINE_INDEX_INODE: int            = 9
 
-    def __init__(self):
-        self._user = None
-        self.uid = None
-        self._user_id = None
-        self._exe = None
+    def __init__(self) -> None:
+
+        # These are set explicitly.
+        self.socket_type = ""
+        self._info_id = 0
+        self.fingerprint = ""
+        self.is_loopback = False
+        self.last_seen = 0
+        self.was_displayed = False
+        self.time = datetime.datetime.now()
+
+        # Lookup for these comes from lines in /proc/net/tcp and /proc/net/udp.
+        self.line = ""
+        self._line_array = []
+        self.inode = ""
+        self._user_id = ""
+        self.local_host = ""
+        self.local_port = ""
+        self.remote_host = ""
+        self.remote_port = ""
+        self.state = ""
+
+        # Lookup for these is deferred.
         self._cmdline = None
-        self.local_host = None
-        self.local_port = None
-        self.remote_host = None
-        self._remote_host_name = None
-        self.remote_port = None
-        self.state = None
-
-        self.socket_type = None
-        self.inode = None
-        self.fingerprint = None
-        self.is_loopback = None
-
-        self.last_seen = None
-        self.was_displayed = None
-
+        self._exe = None
         self._pid = None
-        self._pid_looked_up = None
-
-        self.line = None
-        self._line_array = None
-
-        self.time = None
+        self._pid_looked_up = False
+        self._remote_host_name = None
+        self._user_name = None
 
     @staticmethod
-    def create_from_line(socket_type, line):
+    def create_from_line(socket_type: str, line: str) -> "SocketInfo":
         """Create a SocketInfo of type socket_type from line.
 
         Keyword arguments:
@@ -132,21 +164,21 @@ class SocketInfo():
 
         """
         info = SocketInfo()
-        info.create_from_line2(socket_type, line)
+        info.init_from_line(socket_type, line)
         return info
 
-    def create_from_line2(self, socket_type, line):
+    def init_from_line(self, socket_type: str, line: str) -> None:
         """Create a SocketInfo of type socket_type from line."""
         self.socket_type = socket_type
 
         self.record_line(line)
 
-        # Determine fingerprint.
         self.inode = self._line_array[SocketInfo.LINE_INDEX_INODE]
-        self.fingerprint = 'type:{0} local_address:{1} rem_address:{2}'.format(
-            self.socket_type,
-            self._line_array[SocketInfo.LINE_INDEX_LOCAL_ADDRESS],
-            self._line_array[SocketInfo.LINE_INDEX_REM_ADDRESS])
+
+        # Determine fingerprint.
+        self.fingerprint = f"type:{self.socket_type} " \
+            f"local_address:{self._line_array[SocketInfo.LINE_INDEX_LOCAL_ADDRESS]} " \
+            f"rem_address:{self._line_array[SocketInfo.LINE_INDEX_REM_ADDRESS]}"
 
         self.state = self.UNDEFINED_STATE
 
@@ -156,18 +188,21 @@ class SocketInfo():
 
     # pylint: disable=too-many-arguments
     @staticmethod
-    def _create_from_params(user=None, exe=None, cmdline=None, local_host=None, local_port=None,
-        remote_host=None, remote_host_name=None, remote_port=None, state=None):
+    def _create_from_params(user_name: Optional[str] = None, exe: Optional[str] = None,
+        cmdline: Optional[str] = None, local_host: str = "", local_port: str = "",
+        remote_host: str = "", remote_host_name: Optional[str] = None,
+        remote_port: str = "", state: str = "") -> "SocketInfo":
         """Create a SocketInfo using explicit parameters, for filter unit testing. """
         info = SocketInfo()
-        info.create_from_explicit_params(user, exe, cmdline, local_host, local_port,
+        info.create_from_explicit_params(user_name, exe, cmdline, local_host, local_port,
             remote_host, remote_host_name, remote_port, state)
         return info
 
-    def create_from_explicit_params(self, user, exe, cmdline, local_host, local_port,
-        remote_host, remote_host_name, remote_port, state):
+    def create_from_explicit_params(self, user_name: Optional[str], exe: Optional[str],
+        cmdline: Optional[str], local_host: str, local_port: str, remote_host: str,
+        remote_host_name: Optional[str], remote_port: str, state: str) -> None:
         """Create a SocketInfo using explicit parameters, for filter unit testing. """
-        self._user = user
+        self._user_name = user_name
         self._exe = exe
         self._cmdline = cmdline
         self.local_host = local_host
@@ -177,11 +212,11 @@ class SocketInfo():
         self.remote_port = remote_port
         self.state = state
 
-    def finish_initializing(self):
+    def finish_initializing(self) -> None:
         """Finish initializing. Only needed if this SocketInfo will be kept."""
 
-        # Default UID. Assign later if SocketInfo is reported to user.
-        self.uid = 0
+        # Default is 0. Assign later if SocketInfo is reported to user.
+        self._info_id = 0
 
         # Lookup state and time.
         self.update_dynamic_attrs()
@@ -198,24 +233,24 @@ class SocketInfo():
 
         # Save rest of lookup for "lookup" methods, since expensive and info
         # may not be needed if filtered out.
-        self._user = None
+        self._user_name = None
         self._pid = None
         self._pid_looked_up = False
         self._exe = None
         self._cmdline = None
         self._remote_host_name = None
 
-    def update(self, line):
+    def update(self, line: str) -> None:
         """Updates the this SocketInfo using latest line from /proc."""
         self.record_line(line)
         self.update_dynamic_attrs()
 
-    def record_line(self, line):
+    def record_line(self, line: str) -> None:
         """Records line for this socket from /proc."""
         self.line = line
         self._line_array = SocketInfo._remove_empty(line.split(' '))
 
-    def update_dynamic_attrs(self):
+    def update_dynamic_attrs(self) -> None:
         """Lookup attributes that change over time."""
 
         # State
@@ -227,34 +262,34 @@ class SocketInfo():
         # Time
         self.update_time()
 
-    def update_time(self):
+    def update_time(self) -> None:
         """TODO: docstring"""
         self.time = datetime.datetime.now()
 
-    def has_been_reported(self):
+    def has_been_reported(self) -> bool:
         """Return True if this socket has been reported to user."""
-        reported = self.uid != 0
+        reported = self._info_id != 0
         return reported
 
-    def assign_uid(self):
+    def assign_id(self) -> None:
         """TODO: docstring"""
-        if self.uid == 0:
-            self.uid = SocketInfo._next_uid
-            SocketInfo._next_uid += 1
+        if self._info_id == 0:
+            self._info_id = SocketInfo._next_info_id
+            SocketInfo._next_info_id += 1
 
-    def pid_was_found(self):
+    def pid_was_found(self) -> bool:
         """TODO: docstring"""
-        found = self._pid_looked_up and not self._pid is None
+        found: bool = self._pid_looked_up and not self._pid is None
         return found
 
-    def lookup_user(self):
-        """Lookup user name from uid."""
-        if self._user is None:
-            self._user = pwd.getpwuid(int(self._user_id))[0] # A bit expensive.
-            self._user = self._user.strip()
-        return self._user
+    def lookup_user(self) -> str:
+        """Lookup user name from user id."""
+        if self._user_name is None:
+            self._user_name = pwd.getpwuid(int(self._user_id))[0] # A bit expensive.
+            self._user_name = self._user_name.strip()
+        return self._user_name
 
-    def lookup_pid(self):
+    def lookup_pid(self) -> Optional[str]:
         """Lookup pid from inode."""
         if not self._pid_looked_up:
             self._pid = SocketInfo._get_pid_of_inode(self.inode) # Expensive.
@@ -263,31 +298,33 @@ class SocketInfo():
             self._pid_looked_up = True
         return self._pid
 
-    def lookup_exe(self):
+    def lookup_exe(self) -> Optional[str]:
         """Lookup exe from pid."""
         if self._exe is None:
             try:
                 pid = self.lookup_pid()
-                self._exe = os.readlink('/proc/' + pid + '/exe')
-                self._exe = self._exe.strip()
+                if not pid is None:
+                    self._exe = os.readlink('/proc/' + pid + '/exe')
+                    self._exe = self._exe.strip()
             except OSError:
                 self._exe = None
         return self._exe
 
-    def lookup_cmdline(self):
+    def lookup_cmdline(self) -> Optional[str]:
         """Lookup command line from pid."""
         if self._cmdline is None:
             try:
                 pid = self.lookup_pid()
-                with open('/proc/' + pid + '/cmdline', 'r') as proc_file:
-                    self._cmdline = proc_file.readline()
-                    self._cmdline = self._cmdline.replace('\0', ' ')
-                    self._cmdline = self._cmdline.strip()
+                if not pid is None:
+                    with open('/proc/' + pid + '/cmdline', 'r', encoding="utf-8") as proc_file:
+                        self._cmdline = proc_file.readline()
+                        self._cmdline = self._cmdline.replace('\0', ' ')
+                        self._cmdline = self._cmdline.strip()
             except OSError:
                 self._cmdline = None
         return self._cmdline
 
-    def lookup_remote_host_name(self):
+    def lookup_remote_host_name(self) -> Optional[str]:
         """Lookup remote host name from IP address."""
         if self._remote_host_name is None:
             if SocketInfo._is_ip_addr_private(self.remote_host) or SocketInfo._is_ip_addr_loopback(self.remote_host):
@@ -300,74 +337,69 @@ class SocketInfo():
             self._remote_host_name = self._remote_host_name.strip()
         return self._remote_host_name
 
-    def record_last_seen(self, netstat_id):
+    def record_last_seen(self, netstat_id: int) -> None:
         """TODO: docstring"""
         self.last_seen = netstat_id
 
-    def __str__(self):
-        formatted_time = self.time.strftime("%b %d %X")
-        local_address = self.local_host + ':' + self.local_port
-        remote = self.remote_host
+    def __str__(self) -> str:
+        formatted_time: str = self.time.strftime("%b %d %X")
+        local_address: str = self.local_host + ':' + self.local_port
+        remote: str = self.remote_host
         if not self._remote_host_name is None:
             remote = self._remote_host_name
-        remote_address = remote + ':' + self.remote_port
+        remote_address: str = remote + ':' + self.remote_port
 #Time            Proto ID  User     Local Address        Foreign Address      State       PID   Exe                  Command Line
 #Sep 08 18:15:07 tcp   0   alice    127.0.0.1:8080       0.0.0.0:0            LISTEN      1810  /usr/bin/python2.7   /usr/bin/python foo.py
-        string = '{0} {1:5} {2:3} {3:8} {4:20} {5:20} {6:11} {7:5} {8:20} {9}'.format(
-            formatted_time,        # 0
-            self.socket_type,      # 1
-            str(self.uid),         # 2
-            self.lookup_user(),    # 3
-            local_address,         # 4
-            remote_address,        # 5
-            self.state,            # 6
-            self.lookup_pid(),     # 7
-            self.lookup_exe(),     # 8
-            self.lookup_cmdline()) # 9
+        string = f"{formatted_time} {self.socket_type:5} {str(self._info_id):3} " \
+            f"{self.lookup_user():8} {local_address:20} {remote_address:20} " \
+            f"{self.state:11} {self.lookup_pid():5} {self.lookup_exe():20} " \
+            f"{self.lookup_cmdline()}"
         return string
 
-    def mark_closed(self):
+    def mark_closed(self) -> None:
         """TODO: docstring"""
         self.state = self.CLOSED_STATE
 
-    def is_closed(self):
+    def is_closed(self) -> bool:
         """TODO: docstring"""
         return self.state == self.CLOSED_STATE
 
-    def dump_str(self):
+    def dump_str(self) -> str:
         """TODO: docstring"""
-        string = "fingerprint: {0} ; remainder: {1}".format(self.fingerprint, str(self))
+        string = f"fingerprint: {self.fingerprint} ; remainder: {str(self)}"
         return string
 
     @staticmethod
-    def _is_ip_addr_private(addr_str):
+    def _is_ip_addr_private(addr_str: str) -> bool:
         """Determine if IP address addr is a private address."""
         addr = ipaddress.ip_address(addr_str)
         return addr.is_private
 
     @staticmethod
-    def _is_ip_addr_loopback(addr_str):
+    def _is_ip_addr_loopback(addr_str: str) -> bool:
         """Determine if IP address addr is localhost."""
         addr = ipaddress.ip_address(addr_str)
         return addr.is_loopback
 
     @staticmethod
-    def _hex2dec(hex_str):
+    def _hex2dec(hex_str: str) -> str:
         """Convert hex number in string hex_str to a decimal number string."""
         return str(int(hex_str, 16))
 
     @staticmethod
-    def _ip(hex_str):
+    def _ip(hex_str: str) -> str:
         """Convert IP address hex_str from hex format (e.g. "293DA83F") to decimal format (e.g. "64.244.27.136")."""
+        dec_str: str
+        rev: str
         if len(hex_str) == 8: # This is an IPv4 address.
             # Reverse order of bytes; e.g. A0B1C2D3 becomes D3C2B1A0
             rev = "".join(reversed([hex_str[ii:ii+2] for ii in range(0, len(hex_str), 2)]))
 
             # Convert Unicode string in to UTF-8 string.
-            utf = rev.encode()
+            utf: bytes = rev.encode()
 
             # Turn string into its binary equivalent.
-            binary = binascii.unhexlify(utf)
+            binary: bytes = binascii.unhexlify(utf)
 
             # Turn address into its dotted quad equivalent.
             dec_str = socket.inet_ntoa(binary)
@@ -385,35 +417,37 @@ class SocketInfo():
                 list(reversed([hex_str[ii:ii+2] for ii in range(24, 31, 2)])))
 
             # Add colons
-            colons = ":".join(rev[ii:ii+4] for ii in range(0, len(rev), 4))
+            colons: str = ":".join(rev[ii:ii+4] for ii in range(0, len(rev), 4))
 
             # Shorten address, if possible.
-            is_actually_ipv4 = colons[:29] == "0000:0000:0000:0000:0000:FFFF"
+            is_actually_ipv4: bool = colons[:29] == "0000:0000:0000:0000:0000:FFFF"
             if is_actually_ipv4:
-                octets = [colons[30:32], colons[32:34], colons[35:37], colons[37:39]]
+                octets: list[str] = [colons[30:32], colons[32:34], colons[35:37], colons[37:39]]
                 dec_str = ".".join([str(int(octet, 16)) for octet in octets])
             else:
                 addr = ipaddress.IPv6Address(colons)
                 dec_str = str(addr)
         else:
-            raise MonitorException("ERROR: Invalid IP address {0}".format(hex_str))
+            raise MonitorException(f"ERROR: Invalid IP address {hex_str}")
         return dec_str
 
     @staticmethod
-    def _remove_empty(array):
+    def _remove_empty(array: list[str]) -> list[str]:
         """Remove zero length strings from array."""
         return [x for x in array if x != '']
 
     @staticmethod
-    def _convert_ip_port(hexaddr):
+    def _convert_ip_port(hexaddr: str) -> tuple[str, str]:
         """Convert IP address and port from hex to decimal; e.g. "293DA83F:0050" to ["64.244.27.136", "80"]."""
+        host: str
+        port: str
         host,port = hexaddr.split(':')
-        host_converted = SocketInfo._ip(host)
-        port_converted = SocketInfo._hex2dec(port)
+        host_converted: str = SocketInfo._ip(host)
+        port_converted: str = SocketInfo._hex2dec(port)
         return host_converted,port_converted
 
     @staticmethod
-    def _get_pid_of_inode(inode):
+    def _get_pid_of_inode(inode: str) -> Optional[str]:
         """Look up pid of inode.
 
         Looks through entries in /proc/*/fd/* for a file descriptor that references
@@ -431,8 +465,9 @@ class SocketInfo():
         #print("_get_pid_of_inode(): inode {0}".format(inode))
         #sys.stdout.flush()
 
-        pid = None
-        deref_match = "socket:[{0}]".format(inode)
+        pid: Optional[str] = None
+        deref_match: str = f"socket:[{inode}]"
+        fd_link: str
         for fd_link in glob.glob('/proc/[0-9]*/fd/[0-9]*'):
             try:
                 # Dereference symbolic link.
@@ -442,7 +477,7 @@ class SocketInfo():
                 #     /proc/12764/fd/4
                 # and dref will be
                 #     socket:[139165]
-                deref = None
+                deref: Optional[str] = None
                 deref = os.readlink(fd_link)
 
                 # PID has been found if deref matches.

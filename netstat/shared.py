@@ -17,12 +17,21 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+from typing import Union
+
+OptionType = Union[bool, str]
+
 class MonitorException(Exception):
     """TODO: docstring for MonitorException"""
-    def __init__(self, message, return_code=-1):
+
+    # TODO2: doc instance variables
+    message: str
+    return_code: int
+
+    def __init__(self, message: str, return_code: int = -1) -> None:
         super().__init__()
         self.message = message
         self.return_code = return_code
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.message
