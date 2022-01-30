@@ -18,8 +18,10 @@
 """ TODO2: docstring here """
 
 # Standard library imports
-import unittest
 import sys
+from unittest import TestCase, TestLoader, TextTestRunner
+from unittest.result import TestResult
+from unittest.suite import TestSuite
 
 # Third-party imports
 import netaddr # pylint: disable=import-error
@@ -35,7 +37,7 @@ DEBUG_OUTPUT_FILE_NAME = None
 if not DEBUG_OUTPUT_FILE_NAME is None:
     DEBUG_OUTPUT = open(DEBUG_OUTPUT_FILE_NAME, 'w', encoding="utf-8")
 
-def log(message):
+def log(message) -> None:
     """ TODO2: docstring here """
 
     if not DEBUG_OUTPUT is None:
@@ -43,10 +45,10 @@ def log(message):
         DEBUG_OUTPUT.write('\n')
         DEBUG_OUTPUT.flush()
 
-class TestSocketInfo(unittest.TestCase):
+class TestSocketInfo(TestCase):
     """ TODO2: docstring here """
 
-    def test_parsing_hex2dec(self):
+    def test_parsing_hex2dec(self) -> None:
         """ TODO2: docstring here """
 
         self.assertEqual(SocketInfo._hex2dec("0"), "0")
@@ -55,14 +57,14 @@ class TestSocketInfo(unittest.TestCase):
         self.assertRaises(ValueError, SocketInfo._hex2dec, "FFz")
         self.assertEqual(SocketInfo._hex2dec("abcdef1234"), "737894404660")
 
-    def test_parsing_ip(self):
+    def test_parsing_ip(self) -> None:
         """ TODO2: docstring here """
 
         self.assertEqual(SocketInfo._ip("FFFFFFFF"), "255.255.255.255")
         self.assertRaises(MonitorException, SocketInfo._ip, "0")
         self.assertEqual(SocketInfo._ip("293DA8DF"), "223.168.61.41")
 
-    def test_parsing_ip6(self):
+    def test_parsing_ip6(self) -> None:
         """ TODO2: docstring here """
 
         self.assertEqual(
@@ -70,12 +72,12 @@ class TestSocketInfo(unittest.TestCase):
             netaddr.IPAddress("2001:db9::0123:4567:89ab:cdef"))
         self.assertEqual(SocketInfo._ip("0000000000000000FFFF00000100007F"), "127.0.0.1")
 
-    def test_parsing_ip_port(self):
+    def test_parsing_ip_port(self) -> None:
         """ TODO2: docstring here """
 
         self.assertEqual(SocketInfo._convert_ip_port("293DA8DF:0050"), ("223.168.61.41", "80"))
 
-    def test_parsing_is_ip_addr_private(self):
+    def test_parsing_is_ip_addr_private(self) -> None:
         """ TODO2: docstring here """
 
         self.assertEqual(SocketInfo._is_ip_addr_private("172.27.0.30"), True)
@@ -83,188 +85,195 @@ class TestSocketInfo(unittest.TestCase):
         self.assertEqual(SocketInfo._is_ip_addr_private("74.125.224.194"), False)
         self.assertEqual(SocketInfo._is_ip_addr_private("2001:db9::0123:4567:89ab:cdef"), False)
 
-    def test_parsing_is_ip_addr_loopback(self):
+    def test_parsing_is_ip_addr_loopback(self) -> None:
         """ TODO2: docstring here """
 
         self.assertEqual(SocketInfo._is_ip_addr_loopback("127.0.0.1"), True)
         self.assertEqual(SocketInfo._is_ip_addr_loopback("::1"), True)
 
     # pylint: disable=line-too-long
-    def test_construct(self):
+    def test_construct(self) -> None:
         """
         sl   local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode ref pointer drops
         268: 0100007F:0035 00000000:0000 07 00000000:00000000 00:00000000 00000000     0        0 139165 2 0000000000000000 0
         """
-        line = "268: 0100007F:0035 00000000:0000 07 00000000:00000000 00:00000000 00000000     0        0 139165 2 0000000000000000 0"
-        info = SocketInfo.create_from_line("tcp", line)
+        line: str = "268: 0100007F:0035 00000000:0000 07 00000000:00000000 00:00000000 00000000     0        0 139165 2 0000000000000000 0"
+        info: SocketInfo = SocketInfo.create_from_line("tcp", line)
         info.finish_initializing()
         self.assertEqual(info.state, "CLOSE")
         self.assertEqual(info.local_host, "127.0.0.1")
         self.assertEqual(info.local_port, "53")
         self.assertEqual(info.fingerprint, "type:tcp local_address:0100007F:0035 rem_address:00000000:0000")
 
-    def setUp(self):
+    def setUp(self) -> None:
         pass
 
-class TestFilters(unittest.TestCase):
+class TestFilters(TestCase):
     """ TODO2: docstring here """
 
-    def test_filter_exe(self):
+    def test_filter_exe(self) -> None:
         """ TODO2: docstring here """
 
         # Test match
         fil = GenericFilter("test", exe="/usr/sbin/ntpd")
-        socket_info = SocketInfo._create_from_params(exe="/usr/sbin/ntpd")
-        self.assertTrue(fil.filter_out(socket_info))
+        socket_info1: SocketInfo = SocketInfo._create_from_params(exe="/usr/sbin/ntpd")
+        self.assertTrue(fil.filter_out(socket_info1))
 
         # Test mismatch
-        socket_info = SocketInfo._create_from_params(exe="/usr/sbin/ntpd2")
-        self.assertFalse(fil.filter_out(socket_info))
+        socket_info2: SocketInfo = SocketInfo._create_from_params(exe="/usr/sbin/ntpd2")
+        self.assertFalse(fil.filter_out(socket_info2))
 
-    def test_filter_cmdline(self):
+    def test_filter_cmdline(self) -> None:
         """ TODO2: docstring here """
 
         # Test match
         fil = GenericFilter("test", cmdline="/usr/bin/mpop -Q account1")
-        socket_info = SocketInfo._create_from_params(cmdline="/usr/bin/mpop -Q account1")
-        self.assertTrue(fil.filter_out(socket_info))
+        socket_info1: SocketInfo = SocketInfo._create_from_params(
+            cmdline="/usr/bin/mpop -Q account1")
+        self.assertTrue(fil.filter_out(socket_info1))
 
         # Test mismatch
-        socket_info = SocketInfo._create_from_params(cmdline="/usr/bin/mpop")
-        self.assertFalse(fil.filter_out(socket_info))
+        socket_info2: SocketInfo = SocketInfo._create_from_params(cmdline="/usr/bin/mpop")
+        self.assertFalse(fil.filter_out(socket_info2))
 
-    def test_filter_cmdline_is_re(self):
+    def test_filter_cmdline_is_re(self) -> None:
         """ TODO2: docstring here """
 
         # Test match
-        fil = GenericFilter("test", cmdline="/usr/bin/[^ ]* -Q account1", cmdline_is_re=True)
-        socket_info = SocketInfo._create_from_params(cmdline="/usr/bin/boop -Q account1")
-        self.assertTrue(fil.filter_out(socket_info))
+        fil = GenericFilter("test", cmdline="/usr/bin/[^ ]* -Q account1",
+            cmdline_is_re=True)
+        socket_info1: SocketInfo = SocketInfo._create_from_params(
+            cmdline="/usr/bin/boop -Q account1")
+        self.assertTrue(fil.filter_out(socket_info1))
 
         # Test mismatch
-        socket_info = SocketInfo._create_from_params(cmdline="/usr/bin/boop -R account1")
-        self.assertFalse(fil.filter_out(socket_info))
+        socket_info2: SocketInfo = SocketInfo._create_from_params(
+            cmdline="/usr/bin/boop -R account1")
+        self.assertFalse(fil.filter_out(socket_info2))
 
-    def test_filter_user(self):
+    def test_filter_user(self) -> None:
         """ TODO2: docstring here """
 
         # Test match
         fil = GenericFilter("test", user="root")
-        socket_info = SocketInfo._create_from_params(user_name="root")
-        self.assertTrue(fil.filter_out(socket_info))
+        socket_info1: SocketInfo = SocketInfo._create_from_params(user_name="root")
+        self.assertTrue(fil.filter_out(socket_info1))
 
         # Test mismatch
-        socket_info = SocketInfo._create_from_params(user_name="www-data")
-        self.assertFalse(fil.filter_out(socket_info))
+        socket_info2: SocketInfo = SocketInfo._create_from_params(user_name="www-data")
+        self.assertFalse(fil.filter_out(socket_info2))
 
 
-    def test_filter_local_hosts(self):
+    def test_filter_local_hosts(self) -> None:
         """ TODO2: docstring here """
 
         # Test match
         fil = GenericFilter("test", local_hosts="127.0.0.1")
-        socket_info = SocketInfo._create_from_params(local_host="127.0.0.1")
-        self.assertTrue(fil.filter_out(socket_info))
+        socket_info1: SocketInfo = SocketInfo._create_from_params(local_host="127.0.0.1")
+        self.assertTrue(fil.filter_out(socket_info1))
 
         # Test mismatch
-        socket_info = SocketInfo._create_from_params(local_host="128.0.0.1")
-        self.assertFalse(fil.filter_out(socket_info))
+        socket_info2: SocketInfo = SocketInfo._create_from_params(local_host="128.0.0.1")
+        self.assertFalse(fil.filter_out(socket_info2))
 
-    def test_filter_local_ports(self):
+    def test_filter_local_ports(self) -> None:
         """ TODO2: docstring here """
 
         # Test match
         fil = GenericFilter("test", local_ports="1234,5432,6789")
-        socket_info = SocketInfo._create_from_params(local_port="1234")
-        self.assertTrue(fil.filter_out(socket_info))
-        socket_info = SocketInfo._create_from_params(local_port="6789")
-        self.assertTrue(fil.filter_out(socket_info))
+        socket_info1: SocketInfo = SocketInfo._create_from_params(local_port="1234")
+        self.assertTrue(fil.filter_out(socket_info1))
+        socket_info2: SocketInfo = SocketInfo._create_from_params(local_port="6789")
+        self.assertTrue(fil.filter_out(socket_info2))
 
         # Test mismatch
-        socket_info = SocketInfo._create_from_params(local_port="5555")
-        self.assertFalse(fil.filter_out(socket_info))
+        socket_info3: SocketInfo = SocketInfo._create_from_params(local_port="5555")
+        self.assertFalse(fil.filter_out(socket_info3))
 
-    def test_filter_remote_hosts(self):
+    def test_filter_remote_hosts(self) -> None:
         """ TODO2: docstring here """
 
         # Test match
         fil = GenericFilter("test",
             remote_hosts="www.somedomain.net,anotherdomain.com,www.andanother.org")
-        socket_info = SocketInfo._create_from_params(remote_host_name="www.somedomain.net")
-        self.assertTrue(fil.filter_out(socket_info))
-        socket_info = SocketInfo._create_from_params(remote_host_name="www.andanother.org")
-        self.assertTrue(fil.filter_out(socket_info))
+        socket_info1: SocketInfo = SocketInfo._create_from_params(
+            remote_host_name="www.somedomain.net")
+        self.assertTrue(fil.filter_out(socket_info1))
+        socket_info2: SocketInfo = SocketInfo._create_from_params(
+            remote_host_name="www.andanother.org")
+        self.assertTrue(fil.filter_out(socket_info2))
 
         # Test mismatch
-        socket_info = SocketInfo._create_from_params(remote_host_name="www.somedomain2.net")
-        self.assertFalse(fil.filter_out(socket_info))
+        socket_info3: SocketInfo = SocketInfo._create_from_params(
+            remote_host_name="www.somedomain2.net")
+        self.assertFalse(fil.filter_out(socket_info3))
 
-    def test_filter_remote_ips(self):
+    def test_filter_remote_ips(self) -> None:
         """ TODO2: docstring here """
 
         # Test match
         fil = GenericFilter("test", remote_ips="40.50.60.70,23.24.25.26,77.78.79.0/24")
-        socket_info = SocketInfo._create_from_params(remote_host="23.24.25.26")
-        self.assertTrue(fil.filter_out(socket_info))
-        socket_info = SocketInfo._create_from_params(remote_host="77.78.79.80")
-        self.assertTrue(fil.filter_out(socket_info))
+        socket_info1: SocketInfo = SocketInfo._create_from_params(remote_host="23.24.25.26")
+        self.assertTrue(fil.filter_out(socket_info1))
+        socket_info2: SocketInfo = SocketInfo._create_from_params(remote_host="77.78.79.80")
+        self.assertTrue(fil.filter_out(socket_info2))
 
         # Test mismatch
-        socket_info = SocketInfo._create_from_params(remote_host="77.78.80.80")
-        self.assertFalse(fil.filter_out(socket_info))
+        socket_info3: SocketInfo = SocketInfo._create_from_params(remote_host="77.78.80.80")
+        self.assertFalse(fil.filter_out(socket_info3))
 
-    def test_filter_remote_ports(self):
+    def test_filter_remote_ports(self) -> None:
         """ TODO2: docstring here """
 
         # Test match
         fil = GenericFilter("test", remote_ports="1234,5432,6789")
-        socket_info = SocketInfo._create_from_params(remote_port="1234")
-        self.assertTrue(fil.filter_out(socket_info))
-        socket_info = SocketInfo._create_from_params(remote_port="6789")
-        self.assertTrue(fil.filter_out(socket_info))
+        socket_info1: SocketInfo = SocketInfo._create_from_params(remote_port="1234")
+        self.assertTrue(fil.filter_out(socket_info1))
+        socket_info2: SocketInfo = SocketInfo._create_from_params(remote_port="6789")
+        self.assertTrue(fil.filter_out(socket_info2))
 
         # Test mismatch
-        socket_info = SocketInfo._create_from_params(remote_port="5555")
-        self.assertFalse(fil.filter_out(socket_info))
+        socket_info3: SocketInfo = SocketInfo._create_from_params(remote_port="5555")
+        self.assertFalse(fil.filter_out(socket_info3))
 
-    def test_filter_state(self):
+    def test_filter_state(self) -> None:
         """ TODO2: docstring here """
 
         # Test match
         fil = GenericFilter("test", states="SYN_SENT,ESTABLISHED")
-        socket_info = SocketInfo._create_from_params(state="ESTABLISHED")
-        self.assertTrue(fil.filter_out(socket_info))
+        socket_info1: SocketInfo = SocketInfo._create_from_params(state="ESTABLISHED")
+        self.assertTrue(fil.filter_out(socket_info1))
 
         # Test mismatch
-        socket_info = SocketInfo._create_from_params(state="CLOSED")
-        self.assertFalse(fil.filter_out(socket_info))
+        socket_info2: SocketInfo = SocketInfo._create_from_params(state="CLOSED")
+        self.assertFalse(fil.filter_out(socket_info2))
 
-    def setUp(self):
+    def setUp(self) -> None:
         pass
 
-def run_all_tests():
+def run_all_tests() -> bool:
     """ TODO2: docstring here """
 
-    passed = True
+    passed: bool = True
     # TestSocketInfo
-    suite = unittest.TestLoader().loadTestsFromTestCase(TestSocketInfo)
-    ret = unittest.TextTestRunner(verbosity=3).run(suite)
-    if not ret.wasSuccessful():
+    suite1: TestSuite = TestLoader().loadTestsFromTestCase(TestSocketInfo)
+    result1: TestResult = TextTestRunner(verbosity=3).run(suite1)
+    if not result1.wasSuccessful():
         passed = False
 
     # TestFilters
-    suite = unittest.TestLoader().loadTestsFromTestCase(TestFilters)
-    ret = unittest.TextTestRunner(verbosity=3).run(suite)
-    if not ret.wasSuccessful():
+    suite2: TestSuite = TestLoader().loadTestsFromTestCase(TestFilters)
+    result2: TestResult = TextTestRunner(verbosity=3).run(suite2)
+    if not result2.wasSuccessful():
         passed = False
 
     return passed
 
-def run_specific_tests():
+def run_specific_tests() -> bool:
     """ TODO2: docstring here """
 
-    passed = True
-    suite = unittest.TestSuite()
+    passed: bool = True
+    suite = TestSuite()
 
     #suite.addTest(TestSocketInfo('test_construct'))
     #suite.addTest(TestSocketInfo('test_parsing_ip6'))
@@ -272,16 +281,16 @@ def run_specific_tests():
 
     #suite.addTest(TestFilters('test_filter_cmdline'))
 
-    ret = unittest.TextTestRunner(verbosity=3).run(suite)
-    if not ret.wasSuccessful():
+    result: TestResult = TextTestRunner(verbosity=3).run(suite)
+    if not result.wasSuccessful():
         passed = False
 
     return passed
 
-def main():
+def main() -> None:
     """ TODO2: docstring here """
 
-    passed = run_all_tests()
+    passed: bool = run_all_tests()
     #passed = run_specific_tests()
     if passed:
         sys.exit()
