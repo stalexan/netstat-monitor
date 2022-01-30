@@ -33,7 +33,6 @@ DEBUG_OUTPUT = None
 #DEBUG_OUTPUT_FILE_NAME = "./debug-output.txt"
 DEBUG_OUTPUT_FILE_NAME = None
 if not DEBUG_OUTPUT_FILE_NAME is None:
-    # pylint: disable=consider-using-with
     DEBUG_OUTPUT = open(DEBUG_OUTPUT_FILE_NAME, 'w', encoding="utf-8")
 
 def log(message):
@@ -97,7 +96,7 @@ class TestSocketInfo(unittest.TestCase):
         268: 0100007F:0035 00000000:0000 07 00000000:00000000 00:00000000 00000000     0        0 139165 2 0000000000000000 0
         """
         line = "268: 0100007F:0035 00000000:0000 07 00000000:00000000 00:00000000 00000000     0        0 139165 2 0000000000000000 0"
-        info = SocketInfo._create_from_line("tcp", line)
+        info = SocketInfo.create_from_line("tcp", line)
         info.finish_initializing()
         self.assertEqual(info.state, "CLOSE")
         self.assertEqual(info.local_host, "127.0.0.1")
@@ -151,11 +150,11 @@ class TestFilters(unittest.TestCase):
 
         # Test match
         fil = GenericFilter("test", user="root")
-        socket_info = SocketInfo._create_from_params(user="root")
+        socket_info = SocketInfo._create_from_params(user_name="root")
         self.assertTrue(fil.filter_out(socket_info))
 
         # Test mismatch
-        socket_info = SocketInfo._create_from_params(user="www-data")
+        socket_info = SocketInfo._create_from_params(user_name="www-data")
         self.assertFalse(fil.filter_out(socket_info))
 
 
@@ -268,8 +267,10 @@ def run_specific_tests():
     suite = unittest.TestSuite()
 
     #suite.addTest(TestSocketInfo('test_construct'))
-    suite.addTest(TestSocketInfo('test_parsing_ip6'))
+    #suite.addTest(TestSocketInfo('test_parsing_ip6'))
     #suite.addTest(TestSocketInfo('test_parsing_ip_port'))
+
+    #suite.addTest(TestFilters('test_filter_cmdline'))
 
     ret = unittest.TextTestRunner(verbosity=3).run(suite)
     if not ret.wasSuccessful():

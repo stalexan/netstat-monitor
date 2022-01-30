@@ -94,12 +94,12 @@ class GenericFilter():
         self.cmdline = GenericFilter._cast_option_value_to_str(cmdline)
         self.cmdline_is_re = GenericFilter._cast_option_value_to_bool(cmdline_is_re)
         self.user = GenericFilter._cast_option_value_to_str(user)
-        self.local_hosts = GenericFilter._parse_list_string(str(local_hosts))
-        self.local_ports = GenericFilter._parse_list_string(str(local_ports))
-        self.remote_hosts = GenericFilter._parse_list_string(str(remote_hosts))
-        self.remote_ips = GenericFilter._parse_list_string(str(remote_ips))
-        self.remote_ports = GenericFilter._parse_list_string(str(remote_ports))
-        self.states = GenericFilter._parse_list_string(str(states))
+        self.local_hosts = GenericFilter._parse_list_string(local_hosts)
+        self.local_ports = GenericFilter._parse_list_string(local_ports)
+        self.remote_hosts = GenericFilter._parse_list_string(remote_hosts)
+        self.remote_ips = GenericFilter._parse_list_string(remote_ips)
+        self.remote_ports = GenericFilter._parse_list_string(remote_ports)
+        self.states = GenericFilter._parse_list_string(states)
 
         # Create regular expression for cmdline
         self.cmdline_re = None
@@ -123,10 +123,10 @@ class GenericFilter():
         return bool(option_value)
 
     @staticmethod
-    def _parse_list_string(string: str) -> Optional[list[str]]:
+    def _parse_list_string(string_option: Optional[OptionType]) -> Optional[list[str]]:
         result: Optional[list[str]] = None
-        if not string is None:
-            string = string.strip()
+        if not string_option is None:
+            string = str(string_option).strip()
             if len(string) > 0:
                 result = [entry.strip() for entry in string.split(',')]
         return result

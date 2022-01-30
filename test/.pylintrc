@@ -1,6 +1,5 @@
 [MASTER]
-init-hook='import sys; sys.path.append("../")'
+init-hook='import sys; sys.path.append("..")'
 
 [MESSAGES CONTROL]
 disable=protected-access
-
