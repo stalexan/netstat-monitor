@@ -1,0 +1,46 @@
+#!/bin/bash
+
+function message() {
+    printf "$1\n"
+}
+
+function errMessage() {
+    printf "ERROR: $1\n"
+} >&2
+
+function errExit() {
+    errMessage "$1"
+    exit 1
+}
+
+# cd to the directory this script is in
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+cd "$SCRIPT_DIR"
+
+# Run tests
+cd test
+./test_netstat &> /dev/null || errExit "Tests failed"
+cd ..
+message "1/5: Tests passed"
+
+# Run pylint on netstat
+cd netstat
+pylint . &> /dev/null || errExit "Pylint on netstat module failed"
+cd ..
+message "2/5: Pylint on netstat module passed"
+
+# Run pylint on tests
+cd test
+pylint test_netstat &> /dev/null || errExit "Pylint on tests failed"
+cd ..
+message "3/5: Pylint on tests passed"
+
+# Run my on netstat
+mypy netstat &> /dev/null || errExit "Mypy on netstat module failed"
+message "4/5: Mypy on netstat module passed"
+
+# Run my on tests
+mypy test/test_netstat &> /dev/null || errExit "Mypy on tests failed"
+message "5/5: Mypy on netstat module passed"
+
+echo "Success!"

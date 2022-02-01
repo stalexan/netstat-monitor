@@ -1,0 +1,2 @@
+[MESSAGES CONTROL]
+disable=R0801 # "Similar lines in 2 files" for similar import statements
