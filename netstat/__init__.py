@@ -15,22 +15,8 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-"""
-This module displays information about network connections on a system, similar to the kind
-of information that the netstat command provides.
-
-Classes:
-
-NetStat -- Captures a snapshot of the current network connections.
-Monitor -- Collects netstat snapshots at regular intervals.
-SocketInfo -- Information about a particular connection.
-GenericFilter -- Filters on properties of SocketInfo.
-
-Variables:
-
-DEFAULT_MONITOR_INTERVAL -- How often Monitor collects netstat snapshots, in seconds.
-MIN_MONITOR_INTERVAL -- Minimum value for monitor interval.
-LOOKUP_REMOTE_HOST_NAME -- Whether to convert IP addresses to host names.
+"""The netstat package displays information about network connections on a system,
+similar to the kind of information that the netstat command provides.
 
 """
 
@@ -67,6 +53,7 @@ MIN_MONITOR_INTERVAL =     0.001 # Minimum value for monitor interval.
 LOOKUP_REMOTE_HOST_NAME = True # Whether to convert IP addresses to host names
                                # by doing a host name lookup.
 
+# Location files used to collect connection information.
 PROC_TCP = "/proc/net/tcp"
 PROC_TCP6 = "/proc/net/tcp6"
 PROC_UDP = "/proc/net/udp"
@@ -75,7 +62,8 @@ PROC_UDP6 = "/proc/net/udp6"
 TESTED_KERNEL = "3.17.2"
 
 def main() -> int:
-    """TODO: docstring for main()"""
+    """Monitor network connections."""
+
     # Parse command line
     parser = argparse.ArgumentParser(prog='netstat-monitor',
         description='Monitor network connections.')
@@ -105,11 +93,26 @@ def main() -> int:
     sys.exit(return_code)
 
 class Monitor():
-    """Monitor creates, filters, and reports SocketInfos at regular intervals."""
+    """Creates filters and reports SocketInfos at regular intervals.
+
+    Attributes
+    ----------
+    _closing_states : list[str]
+        List of socket states that indicate the connection is closing.
+    _interval : float
+        How often to look up connections, in seconds.
+    _ignore_loopback : bool
+        Whether to ignore connections on the loopback interface.
+    _state_changes : bool
+        Whether to report connection state changes to user.
+    _seen : Dict[str, SocketInfo]
+        Collection of connections already seen, indexed by connection fingerprint.
+    _netstat_id : int
+        The unique ID used for the last NetStat created.
+
+    """
     _closing_states: ClassVar[list[str]] = ['FIN_WAIT1', 'FIN_WAIT2',
         'TIME_WAIT', 'CLOSE', 'CLOSE_WAIT', 'LAST_ACK', 'CLOSING']
-
-    # TODO2: document instance variables
     _interval: float = DEFAULT_MONITOR_INTERVAL
     _ignore_loopback: bool = False
     _state_changes: bool = False
@@ -118,16 +121,21 @@ class Monitor():
 
     def __init__(self, interval: float = DEFAULT_MONITOR_INTERVAL, ignore_loopback: bool = False,
         state_changes: bool = False, filter_files: Optional[list[str]] = None) -> None:
-        """Create a Monitor that monitors every interval seconds using the specified filters."
+        """Create a Monitor that checks for connections every interval seconds using the
+        specified filters.
 
-        Keyword arguments:
-
-        interval -- Number of seconds between each time Monitor creates a Netstat. Defaults
-          to DEFAULT_MONITOR_INTERVAL.
-        ignore_loopback -- Ignore local connections.
-        state_changes -- Report connection state changes.
-        filters -- List of filters to limit what SocketInfos are displayed to the user. Any
-          SocketInfos that match a filter are not displayed. Optional.
+        Parameters
+        ----------
+        interval : int, default DEFAULT_MONITOR_INTERVAL
+            Number of seconds between each time Monitor creates a Netstat, and reports any new
+            connections found.
+        ignore_loopback : bool, default False
+            Whether to ignore local connections.
+        state_changes : bool, default False
+            Whether to report connection state changes.
+        filters: list[str], optional
+            List of any filters to limit which connections are displayed. Any connections
+            (SocketInfos) that match a filter are not displayed.
 
         """
         if interval < MIN_MONITOR_INTERVAL:
@@ -165,12 +173,31 @@ class Monitor():
 
     @staticmethod
     def _read_first_line(path: str) -> str:
+        """Read the first line of the specified file.
+
+        Parameters
+        ----------
+        path : str
+            The path of the file to read.
+
+        Returns
+        -------
+        str
+            The first line of the file.
+
+        """
         with open(path, 'r', encoding="utf-8") as proc_file:
             line: str = proc_file.readline().strip()
         return line
 
     def _do_netstat(self) -> None:
-        """Create a NetStat, filter out SocketInfos, and report."""
+        """Check for connections.
+
+        Check and report on current connections. Filters out any that have
+        already been seen and whose state has not changed, or any filtered out
+        by provided filters.
+
+        """
         # Lookup all current sockets.
         self._netstat_id += 1
         netstat = NetStat(self._netstat_id)
@@ -210,8 +237,27 @@ class Monitor():
 
     # pylint: disable=too-many-return-statements
     def _filter_socket(self, socket_info: SocketInfo) -> Optional[SocketInfo]:
-        """Return the SocketInfo to use if not filtered, else None."""
+        """Determine what to display to the user for a given connection (SocketInfo).
 
+        Parameters
+        ----------
+        socket_info : SocketInfo
+            The candidate connection, or SocketInfo, to display to user.
+
+        Returns
+        -------
+        SocketInfo : optional
+            The SocketInfo to display to the user for this connection, or None
+            if nothing should be displayed. Nothing should be displayed if the
+            connection is filtered out, or if the connection's already been
+            displayed and there isn't a state change to show.
+
+            If the connection should be displayed, a SocketInfo is returned.
+            For connections that haven't been seen before, the same SocketInfo
+            passed to this method is returned.  For connections that have been
+            seen, the previously used SocketInfo is returned.
+
+        """
         # Has this SocketInfo already been seen?
         seen_info: Optional[SocketInfo] = self.lookup_seen(socket_info)
         already_seen: bool = not seen_info is None
@@ -276,23 +322,55 @@ class Monitor():
         return socket_info
 
     def lookup_seen(self, socket_info: SocketInfo) -> Optional[SocketInfo]:
-        """Return previously seen SocketInfo that matches fingerprint of socket_info."""
+        """Lookup the SocketInfo that was previously used for the given connection.
+
+        Parameters
+        ----------
+        socket_info : SocketInfo
+            Which connection to lookup.
+
+        Returns
+        -------
+        SocketInfo, optional
+            The SocketInfo that was previously used for this connection. Or None
+            if this connection hasn't been seen before.
+
+        """
         seen_info: Optional[SocketInfo] = self._seen.get(socket_info.fingerprint)
         return seen_info
 
     def has_been_seen(self, socket_info: SocketInfo) -> bool:
-        """Return True if a SocketInfo with same fingerprint as socket_info has
-        already been seen."""
+        """Determine whether this connection has been seen before.
+
+        Parameters
+        ----------
+        socket_info : SocketInfo
+            The connection in question.
+
+        Returns
+        -------
+        bool:
+            True if the connection has already been seen.
+
+        """
         seen_info = self.lookup_seen(socket_info)
         return not seen_info is None
 
     def _mark_seen(self, socket_info: SocketInfo) -> None:
-        """Record socket_info as seen."""
+        """Mark the given connection as seen.
+
+        Parameters
+        ----------
+        socket_info : SocketInfo
+            The connection to mark as seen.
+
+        """
         socket_info.record_last_seen(self._netstat_id)
         self._seen[socket_info.fingerprint] = socket_info
 
     def monitor(self) -> None:
-        """Perform a NetStat every monitor_interval seconds."""
+        """Check for connections at regular intervals and report to user."""
+
         # Print header
         # pylint: disable=line-too-long
         print("Time            Proto ID  User     Local Address        Foreign Address      State       PID   Exe                  Command Line")
@@ -304,14 +382,32 @@ class Monitor():
 
 # pylint: disable=too-few-public-methods
 class NetStat():
-    """NetStat creates SocketInfo instances from lines in /proc/net/tcp and /proc/net/udp"""
+    """Snapshot of connections found at a given instant of time.
 
-    # TODO2: document instance variables
+    A SocketInfo is created for each line found in the files ``/proc/net/tcp``,
+    ``/proc/net/tcp6``, ``/proc/net/udp``, and ``/proc/net/udp6``.
+
+    Attributes
+    ----------
+    netstat_id : int
+        A unique ID for this NetStat instance.
+
+    socket_infos: list[SocketInfo]
+        The collection of SocketInfos found, one per connection.
+
+    """
     netstat_id: int
     socket_infos: list[SocketInfo] = []
 
     def __init__(self, netstat_id: int) -> None:
-        """Create SocketInfo instances."""
+        """Lookup connections and create a SocketInfo for each.
+
+        Parameters
+        ----------
+        netstat_id : int
+            The unique ID to use for this NetStat instance.
+
+        """
         # Assign id.
         self.netstat_id: int = netstat_id
 
@@ -323,7 +419,16 @@ class NetStat():
         self._load('udp', PROC_UDP)
 
     def _load(self, socket_type: str, path: str) -> None:
-        """Create SocketInfo from either /proc/net/tcp or /proc/net/udp"""
+        """Create SocketInfos for the connections found in the given file.
+
+        Parameters
+        ----------
+        socket_type : {'tcp', 'udp'}
+            The type of connection: TCP or UDP.
+        path : str
+            The path of the file to read connection info from.
+
+        """
         # Read the table of sockets & remove header
         with open(path, 'r', encoding="utf-8") as proc_file:
             content: list[str] = proc_file.readlines()

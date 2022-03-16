@@ -1,4 +1,4 @@
-"""TODO: docstring"""
+"""Shared code for the netstat module."""
 
 #!/usr/bin/env python3
 #
@@ -22,9 +22,16 @@ from typing import Union
 OptionType = Union[bool, str]
 
 class MonitorException(Exception):
-    """TODO: docstring for MonitorException"""
+    """Exception type for netstat-monitor.
 
-    # TODO2: doc instance variables
+    Attributes
+    ----------
+    message : str
+        Exception message.
+    return_code : int
+        Return code to exit with.
+
+    """
     message: str
     return_code: int
 

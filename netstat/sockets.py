@@ -1,4 +1,4 @@
-"""TODO: docstring"""
+"""This file contains the SocketInfo class."""
 
 #!/usr/bin/env python3
 #
@@ -34,10 +34,11 @@ from .shared import MonitorException
 # pylint: disable=too-many-instance-attributes
 class SocketInfo():
     # pylint: disable=line-too-long
-    """
-    Information about a particular network connection
+    """Information about a particular network connection.
 
-    A SocketInfo is generated for each line found in /proc/net/tcp and /proc/net/udp.
+    A SocketInfo is generated for each line found in the files IPv4 files
+    ``/proc/net/tcp`` and ``/proc/net/udp``, and the IPv6 files
+    ``/proc/net/tcp6`` and ``/proc/net/udp6``.
 
     Sample from /proc/net/tcp:
         sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
@@ -49,30 +50,62 @@ class SocketInfo():
        268: 0100007F:0035 00000000:0000 07 00000000:00000000 00:00000000 00000000     0        0 139165 2 0000000000000000 0
        283: 00000000:0044 00000000:0000 07 00000000:00000000 00:00000000 00000000     0        0 160578 2 0000000000000000 0
 
-    Attributes:
+    Attributes That Are Set Explicity
+    ---------------------------------
+    socket_type : {'tcp', 'udp'}
+        The type of socket: TCP or UDP.
+    _info_id : int
+        The unique ID for this SocketInfo instance.
+    fingerprint : str
+        A unique fingerprint or hash value for this SocketInfo.
+    is_loopback : bool
+        Whether this is a loopback connection.
+    last_seen : int
+        The unique ID of the last NetStat that saw this connection.
+    was_displayed : bool
+        Whether this connection has been displayed to the user.
+    time : datetime.datetime
+        When this SocketInfo was last updated.
 
-    socket_type -- Type of socket: "tcp" for sockets from /proc/net/tcp or "udp" for sockets
-      that from /proc/net/udp
-    line -- The original /proc/net line this SocketInfo is based on (from either /proc/net/tcp
-      or /proc/net/udp)
-    inode -- The inode for the socket.
-    fingerprint -- A fingerprint, or hash value, for the SocketInfo.
-    info_id -- Unique id for this socket.
-    state -- The socket state; e.g. SYN_SENT, ESTABLISHED, etc.
-    time -- When SocketInfo was created.
-    last_seen -- When this SocketInfo was last seen.
-    local_host -- Connection local IP address.
-    local_port -- Connection local port.
-    remote_host -- Connection remote IP address.
-    remote_port -- Connection report port.
+    Attributes That Come From ``/proc/net`` Files
+    ---------------------------------------------
+    line : str
+        The original ``/proc/net`` line this SocketInfo is based on.
+    _line_array : list[str]
+        Line parsed into string elements, with whitespace as delimiter.
+    inode : str
+        The inode for this connection.
+    _user_id : str
+        The user id for this connection.
+    local_host : str
+        The local IP address.
+    local_port : str
+        The local port.
+    remote_host : str
+        The remote IP address.
+    remote_port : str
+        The remote port.
+    state : str
+        The connection state; e.g. SYN_SENT, ESTABLISHED, etc.
 
-    Other attributes are returned from lookup functions, to avoid the extra overhead required
-    to look them up when they're not needed. See the functions: lookup_user(), lookup_pid(),
-    lookup_exe(), lookup_cmdline(), and lookup_remote_host_name().
+    Attributes That Are Looked Up Later If Needed
+    ---------------------------------------------
+    _cmdline : Optional[str]
+        The command line for the process associated with this connection. For
+        example ``/usr/bin/python3 foo.py``.
+    _exe : Optional[str]
+        The exe associated with the process for this connection. For example
+        `/usr/bin/python3.8`.
+    _pid : Optional[str]
+        The pid for the process associated with this connection.
+    _pid_looked_up : bool
+        Whether the pid has been looked up.
+    _remote_host_name : Optional[str]
+        The name of the remote host associated with this connection.
+    _user_name : Optional[str]
+        The user name for the process associated with this connection.
+
     """
-
-    # TODO2: doc instance attributes
-
     # These are set explicitly.
     socket_type: str
     _info_id: int # Unique ID for this SocketInfo
@@ -156,11 +189,16 @@ class SocketInfo():
 
     @staticmethod
     def create_from_line(socket_type: str, line: str) -> "SocketInfo":
-        """Create a SocketInfo of type socket_type from line.
+        """Create a SocketInfo of type socket_type using data from line.
 
-        Keyword arguments:
-        socket_type -- tcp or udp
-        line -- line from either /proc/net/tcp or /proc/net/udp
+        Attributes
+        ----------
+        See ``init_from_line()``.
+
+        Returns
+        -------
+        SocketInfo:
+            The newly created SocketInfo.
 
         """
         info = SocketInfo()
@@ -168,7 +206,16 @@ class SocketInfo():
         return info
 
     def init_from_line(self, socket_type: str, line: str) -> None:
-        """Create a SocketInfo of type socket_type from line."""
+        """Initialize this SocketInfo of type socket_type using data from line.
+
+        Parameters
+        ----------
+        socket_type : {'tcp', 'udp'}
+            The type of socket: TCP or UDP.
+        line : str
+            The ``/proc/net`` line this connection is based on.
+
+        """
         self.socket_type = socket_type
 
         self.record_line(line)
@@ -192,7 +239,11 @@ class SocketInfo():
         cmdline: Optional[str] = None, local_host: str = "", local_port: str = "",
         remote_host: str = "", remote_host_name: Optional[str] = None,
         remote_port: str = "", state: str = "") -> "SocketInfo":
-        """Create a SocketInfo using explicit parameters, for filter unit testing. """
+        """Create a SocketInfo using explicit parameters, for filter unit testing.
+
+        See ``create_from_explicit_params()``.
+
+        """
         info = SocketInfo()
         info.create_from_explicit_params(user_name, exe, cmdline, local_host, local_port,
             remote_host, remote_host_name, remote_port, state)
@@ -201,7 +252,30 @@ class SocketInfo():
     def create_from_explicit_params(self, user_name: Optional[str], exe: Optional[str],
         cmdline: Optional[str], local_host: str, local_port: str, remote_host: str,
         remote_host_name: Optional[str], remote_port: str, state: str) -> None:
-        """Create a SocketInfo using explicit parameters, for filter unit testing. """
+        """Initialize this SocketInfo using explicit parameters, for filter unit testing.
+
+        Attributes
+        ----------
+        user_name : str, optional
+            The user name for the process associated with this connection.
+        exe : str, optional
+            The exe associated with the process for this connection.
+        cmdline : Optional[str]
+         The command line for the process associated with this connection.
+        local_host : str
+            The local IP address.
+        local_port : str
+            The local port.
+        remote_host : str
+            The remote IP address.
+        remote_host_name : str, optional
+            The name of the remote host associated with this connection.
+        remote_port : str
+            The remote port.
+        state : str
+            The connection state; e.g. SYN_SENT, ESTABLISHED, etc.
+
+        """
         self._user_name = user_name
         self._exe = exe
         self._cmdline = cmdline
@@ -213,8 +287,11 @@ class SocketInfo():
         self.state = state
 
     def finish_initializing(self) -> None:
-        """Finish initializing. Only needed if this SocketInfo will be kept."""
+        """Finish initializing this SocketInfo.
 
+        This is called only if this SocketInfo will be kept, and not filtered out.
+
+        """
         # Default is 0. Assign later if SocketInfo is reported to user.
         self._info_id = 0
 
@@ -241,12 +318,12 @@ class SocketInfo():
         self._remote_host_name = None
 
     def update(self, line: str) -> None:
-        """Updates the this SocketInfo using latest line from /proc."""
+        """Update this SocketInfo using latest line from ``/proc/net``."""
         self.record_line(line)
         self.update_dynamic_attrs()
 
     def record_line(self, line: str) -> None:
-        """Records line for this socket from /proc."""
+        """Records line for this socket from ``/proc/net``."""
         self.line = line
         self._line_array = SocketInfo._remove_empty(line.split(' '))
 
@@ -263,7 +340,7 @@ class SocketInfo():
         self.update_time()
 
     def update_time(self) -> None:
-        """TODO: docstring"""
+        """Set time for this SocketInfo to now."""
         self.time = datetime.datetime.now()
 
     def has_been_reported(self) -> bool:
@@ -272,13 +349,13 @@ class SocketInfo():
         return reported
 
     def assign_id(self) -> None:
-        """TODO: docstring"""
+        """Give this SocketInfo a unique ID."""
         if self._info_id == 0:
             self._info_id = SocketInfo._next_info_id
             SocketInfo._next_info_id += 1
 
     def pid_was_found(self) -> bool:
-        """TODO: docstring"""
+        """Return True if a pid has been found for the process associated with this connection."""
         found: bool = self._pid_looked_up and not self._pid is None
         return found
 
@@ -338,10 +415,11 @@ class SocketInfo():
         return self._remote_host_name
 
     def record_last_seen(self, netstat_id: int) -> None:
-        """TODO: docstring"""
+        """Record the ID of the last NetStat that saw this connection."""
         self.last_seen = netstat_id
 
     def __str__(self) -> str:
+        """Return formatted string to display to user, that describes this connection."""
         formatted_time: str = self.time.strftime("%b %d %X")
         local_address: str = self.local_host + ':' + self.local_port
         remote: str = self.remote_host
@@ -357,38 +435,38 @@ class SocketInfo():
         return string
 
     def mark_closed(self) -> None:
-        """TODO: docstring"""
+        """Set the state of the connection to closed."""
         self.state = self.CLOSED_STATE
 
     def is_closed(self) -> bool:
-        """TODO: docstring"""
+        """Whether this connection is closed."""
         return self.state == self.CLOSED_STATE
 
     def dump_str(self) -> str:
-        """TODO: docstring"""
+        """Return a debug string that describes this connection."""
         string = f"fingerprint: {self.fingerprint} ; remainder: {str(self)}"
         return string
 
     @staticmethod
     def _is_ip_addr_private(addr_str: str) -> bool:
-        """Determine if IP address addr is a private address."""
+        """Return True if the provided IP address is private."""
         addr = ipaddress.ip_address(addr_str)
         return addr.is_private
 
     @staticmethod
     def _is_ip_addr_loopback(addr_str: str) -> bool:
-        """Determine if IP address addr is localhost."""
+        """Return True if the provided IP address is localhost."""
         addr = ipaddress.ip_address(addr_str)
         return addr.is_loopback
 
     @staticmethod
     def _hex2dec(hex_str: str) -> str:
-        """Convert hex number in string hex_str to a decimal number string."""
+        """Return decimal equivalent of the provided hex number."""
         return str(int(hex_str, 16))
 
     @staticmethod
     def _ip(hex_str: str) -> str:
-        """Convert IP address hex_str from hex format (e.g. "293DA83F") to decimal format (e.g. "64.244.27.136")."""
+        """Return the decimal equivalent of the IP address provided as hex; e.g. "64.244.27.136" from "293DA83F"."""
         dec_str: str
         rev: str
         if len(hex_str) == 8: # This is an IPv4 address.
@@ -459,8 +537,8 @@ class SocketInfo():
             socket:[139165]
         This function returns
             12764
-        """
 
+        """
         # LOG
         #print("_get_pid_of_inode(): inode {0}".format(inode))
         #sys.stdout.flush()

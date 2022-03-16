@@ -1,4 +1,4 @@
-"""TODO: docstring"""
+"""This file contains the GenericFilter class."""
 
 #!/usr/bin/env python3
 #
@@ -31,9 +31,48 @@ from .sockets import SocketInfo
 
 # pylint: disable=too-many-instance-attributes
 class GenericFilter():
-    """GenericFilter is a SocketFilter that filters on properties of SocketInfo."""
+    """Filter to limit what connections are displayed to a user.
 
-    # TODO2: doc member attributes
+    A filter takes effect if all filter attributes match. Attributes are AND'ed
+    together and values within any attribute lists are OR'ed together. For
+    example if a filter has these settings:
+
+        exe: ``/usr/lib/firefox/firefox``
+        user: alice
+        remote_ports: 53, 80, 443, 8080
+
+    Connections with exe set to ``/usr/lib/firefox/firefox`` AND user set to
+    alice AND a remote port of either 53 OR 80 OR 443 OR 8080 are filtered out.
+
+    Attributes
+    ----------
+    name : str
+        Filter name.
+    pid : str, optional
+        The pid to filter out.
+    exe : str, optional
+        The exe to filter out.
+    cmdline : str, optional
+        The command line to filter out.
+    cmdline_is_re: bool
+        Whether cmdline is a regular expression.
+    user : str, optional
+        The user to filter out.
+    local_hosts: list[str], optional
+        Local hostnames to filter out.
+    local_ports: list[str], optional
+        Local ports to filter out.
+    remote_hosts: list[str], optional
+        Remote hostnames to filter out.
+    remote_ips: list[str], optional
+        Remote IP addresses to filter out.
+    remote_ports: list[str], optional
+        Remote ports to filter out.
+    states: list[str], optional
+        Connection states to filter out.
+
+    """
+
     name: str
     pid: Optional[str]
     exe: Optional[str]
@@ -51,41 +90,13 @@ class GenericFilter():
         "local_hosts", "local_ports", "remote_hosts", "remote_ips", "remote_ports", "states"]
 
     # pylint: disable=too-many-arguments
-
     def __init__(self, name: str, pid: Optional[OptionType] = None,
         exe: Optional[OptionType] = None, cmdline: Optional[OptionType] = None,
         cmdline_is_re: Optional[OptionType] = None, user: Optional[OptionType] = None,
         local_hosts: Optional[OptionType] = None, local_ports: Optional[OptionType] = None,
         remote_hosts: Optional[OptionType] = None, remote_ips: Optional[OptionType] = None,
         remote_ports: Optional[OptionType] = None, states: Optional[OptionType] = None) -> None:
-
-        """Create a GenericFilter that filters out SocketInfos that match all
-        the specified properties.
-
-        All arguments are optional. Arguments that aren't set default to None, for "don't care."
-        Arguments that are set cause a SocketInfo to be filtered out if all attributes of the
-        SocketInfo match the attributes of the arguments set.
-
-        Keyword arguments:
-
-        pid -- If set, pid that a SocketInfo must match to be filtered out.
-        exe -- If set, exe that a SocketInfo must match to be filtered out.
-        cmdline -- If set, cmdline that a SocketInfo must match to be filtered out.
-        cmdline_is_re -- If true, cmdline is treated as a regular expression.
-        user -- If set, user that a SocketInfo must match to be filtered out.
-        local_hosts -- If set, an array of IP addresses to filter on. A SocketInfo is filtered
-          out if its local_host matches any of the addresses.
-        local_ports -- If set, an array of ports to filter on. A SocketInfo is filtered
-          out if its local_port matches any of the ports.
-        remote_hosts -- If set, an array of domain names to filter on. A SocketInfo is filtered
-          out if its remote_host_name matches any of the addresses.
-        remote_ips -- If set, an array of IP address ranges to filter on, in CIDR notation. A
-          SocketInfo is filtered out if its remote_host falls within any of the ranges.
-        remote_ports -- If set, an array of ports to filter on. A SocketInfo is filtered
-          out if its local_port matches any of the ports.
-        states -- If set, an array of states to filter on. A SocketInfo is filtered
-          out if its state matches any of the states.
-        """
+        """Create the specified filter."""
 
         # strings. Methods return None if input param is None.
         self.name = name
@@ -112,18 +123,21 @@ class GenericFilter():
 
     @staticmethod
     def _cast_option_value_to_str(option_value: Optional[OptionType]) -> Optional[str]:
+        """Cast an option know to be a string from OptionType to str"""
         if option_value is None:
             return None
         return str(option_value)
 
     @staticmethod
     def _cast_option_value_to_bool(option_value: Optional[OptionType]) -> bool:
+        """Cast an option know to be a bool from OptionType to bool"""
         if option_value is None:
             return False
         return bool(option_value)
 
     @staticmethod
     def _parse_list_string(string_option: Optional[OptionType]) -> Optional[list[str]]:
+        """Cast an option known to be a list of strings from OptionType to list[str]"""
         result: Optional[list[str]] = None
         if not string_option is None:
             string = str(string_option).strip()
@@ -132,6 +146,7 @@ class GenericFilter():
         return result
 
     def __str__(self) -> str:
+        """Return a debug string that describes this filter."""
         parts: list[str] = []
         self._add_str_part(parts, 'name')
         self._add_str_part(parts, 'pid')
@@ -149,6 +164,19 @@ class GenericFilter():
         return string
 
     def _add_str_part(self, parts: list[str], name: str) -> None:
+        """Add to the list of strings used to generate a debug string that describes this filter.
+
+        This will add to the "parts" list if the attribute "name" is set.
+        Otherwise, "parts" remains unchanged.
+
+        Parameters
+        ----------
+        parts : list[str]
+            The list to add to.
+        name : str
+            The name of the attribute to add. The attribute's value will be looked up and a
+            string the attribute name and value value will be added to parts.
+        """
         attr: Optional[str] = getattr(self, name)
         if not attr is None:
             if len(parts) > 0:
@@ -259,7 +287,7 @@ class GenericFilter():
     def filter_out(self, socket_info: SocketInfo) -> bool:
         """Return True if socket_info should be filtered out."""
 
-        # Consider each parameter for this filter. All parameters have to match
+        # Consider each parameter for this filter. All set parameters have to match
         # a socket for the socket to be filtered out.
         filter_out: bool = (
             self._pid_filters_out(socket_info) and
@@ -277,8 +305,25 @@ class GenericFilter():
 
     @staticmethod
     def load_filters(filter_files: Optional[list[str]]) -> "list[GenericFilter]":
-        """TODO2: doc string"""
+        """Create filters from specified files.
 
+        Parameters
+        ----------
+        filter_files : list[str], optional
+            Paths to files that define filters.
+
+        Returns
+        -------
+        list[GenericFilter]:
+            The newly created filters.
+
+        Raises
+        ------
+        MonitorException:
+            If any of the filter files cannot be opened, or if there's an error
+            parsing the filters.
+
+        """
         filters: list[GenericFilter] = []
         if filter_files is None:
             return filters

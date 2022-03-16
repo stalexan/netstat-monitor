@@ -35,11 +35,11 @@ pylint test_netstat &> /dev/null || errExit "Pylint on tests failed"
 cd ..
 message "3/5: Pylint on tests passed"
 
-# Run my on netstat
+# Run mypy on netstat
 mypy netstat &> /dev/null || errExit "Mypy on netstat module failed"
 message "4/5: Mypy on netstat module passed"
 
-# Run my on tests
+# Run mypy on tests
 mypy test/test_netstat &> /dev/null || errExit "Mypy on tests failed"
 message "5/5: Mypy on netstat module passed"
 
