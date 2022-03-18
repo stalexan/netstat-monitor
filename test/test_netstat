@@ -250,6 +250,31 @@ class TestFilters(TestCase):
         socket_info2: SocketInfo = SocketInfo._create_from_params(state="CLOSED")
         self.assertFalse(fil.filter_out(socket_info2))
 
+    def test_multi_element_filter(self) -> None:
+        """Test filter on user, exe, and port."""
+
+        # Test match
+        fil = GenericFilter("test", exe="/usr/lib/firefox/firefox", user="alice",
+            remote_ports="53, 80, 443, 8080")
+        socket_info1: SocketInfo = SocketInfo._create_from_params(exe="/usr/lib/firefox/firefox",
+            user_name="alice", remote_port="443")
+        self.assertTrue(fil.is_socket_filtered_out(socket_info1))
+
+        # Test mismatch on exe
+        socket_info2: SocketInfo = SocketInfo._create_from_params(exe="/usr/lib/firefox/betty-boop",
+            user_name="alice", remote_port="443")
+        self.assertFalse(fil.is_socket_filtered_out(socket_info2))
+
+        # Test mismatch on user name
+        socket_info3: SocketInfo = SocketInfo._create_from_params(exe="/usr/lib/firefox/firefox",
+            user_name="bob", remote_port="443")
+        self.assertFalse(fil.is_socket_filtered_out(socket_info3))
+
+        # Test mismatch on port
+        socket_info4: SocketInfo = SocketInfo._create_from_params(exe="/usr/lib/firefox/firefox",
+            user_name="alice", remote_port="123")
+        self.assertFalse(fil.is_socket_filtered_out(socket_info4))
+
     def setUp(self) -> None:
         pass
 
@@ -282,6 +307,7 @@ def run_specific_tests() -> bool:
     #suite.addTest(TestSocketInfo('test_parsing_ip_port'))
 
     #suite.addTest(TestFilters('test_filter_cmdline'))
+    suite.addTest(TestFilters('test_multi_element_filter'))
 
     result: TestResult = TextTestRunner(verbosity=3).run(suite)
     if not result.wasSuccessful():
