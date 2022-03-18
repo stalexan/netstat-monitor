@@ -113,6 +113,18 @@ class TestSocketInfo(TestCase):
 class TestFilters(TestCase):
     """Tests for GenericFilter class."""
 
+    def test_filter_pid(self) -> None:
+        """Test filters on pid."""
+
+        # Test match
+        fil = GenericFilter("test", pid="1")
+        socket_info1: SocketInfo = SocketInfo._create_from_params(pid="1")
+        self.assertTrue(fil.is_socket_filtered_out(socket_info1))
+
+        # Test mismatch
+        socket_info2: SocketInfo = SocketInfo._create_from_params(pid="11")
+        self.assertFalse(fil.is_socket_filtered_out(socket_info2))
+
     def test_filter_exe(self) -> None:
         """Test filters on exe."""
 
@@ -306,8 +318,8 @@ def run_specific_tests() -> bool:
     #suite.addTest(TestSocketInfo('test_parsing_ip6'))
     #suite.addTest(TestSocketInfo('test_parsing_ip_port'))
 
-    #suite.addTest(TestFilters('test_filter_cmdline'))
-    suite.addTest(TestFilters('test_multi_element_filter'))
+    suite.addTest(TestFilters('test_filter_pid'))
+    #suite.addTest(TestFilters('test_multi_element_filter'))
 
     result: TestResult = TextTestRunner(verbosity=3).run(suite)
     if not result.wasSuccessful():

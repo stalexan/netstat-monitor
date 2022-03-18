@@ -238,7 +238,7 @@ class SocketInfo():
     def _create_from_params(user_name: Optional[str] = None, exe: Optional[str] = None,
         cmdline: Optional[str] = None, local_host: str = "", local_port: str = "",
         remote_host: str = "", remote_host_name: Optional[str] = None,
-        remote_port: str = "", state: str = "") -> "SocketInfo":
+        remote_port: str = "", state: str = "", pid: str ="") -> "SocketInfo":
         """Create a SocketInfo using explicit parameters, for filter unit testing.
 
         See ``create_from_explicit_params()``.
@@ -246,12 +246,12 @@ class SocketInfo():
         """
         info = SocketInfo()
         info.create_from_explicit_params(user_name, exe, cmdline, local_host, local_port,
-            remote_host, remote_host_name, remote_port, state)
+            remote_host, remote_host_name, remote_port, state, pid)
         return info
 
     def create_from_explicit_params(self, user_name: Optional[str], exe: Optional[str],
         cmdline: Optional[str], local_host: str, local_port: str, remote_host: str,
-        remote_host_name: Optional[str], remote_port: str, state: str) -> None:
+        remote_host_name: Optional[str], remote_port: str, state: str, pid: Optional[str]) -> None:
         """Initialize this SocketInfo using explicit parameters, for filter unit testing.
 
         Attributes
@@ -274,6 +274,8 @@ class SocketInfo():
             The remote port.
         state : str
             The connection state; e.g. SYN_SENT, ESTABLISHED, etc.
+        pid : str
+            The pid of the process associated with this connection.
 
         """
         self._user_name = user_name
@@ -285,6 +287,8 @@ class SocketInfo():
         self._remote_host_name = remote_host_name
         self.remote_port = remote_port
         self.state = state
+        self._pid = pid
+        self._pid_looked_up = not pid is None
 
     def finish_initializing(self) -> None:
         """Finish initializing this SocketInfo.
