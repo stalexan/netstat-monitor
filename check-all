@@ -21,26 +21,26 @@ cd "$SCRIPT_DIR"
 cd test
 ./test_netstat &> /dev/null || errExit "Tests failed"
 cd ..
-message "1/5: Tests passed"
+message "Check 1/5: Tests passed"
 
 # Run pylint on netstat
 cd netstat
 pylint . &> /dev/null || errExit "Pylint on netstat module failed"
 cd ..
-message "2/5: Pylint on netstat module passed"
+message "Check 2/5: Pylint on netstat module passed"
 
 # Run pylint on tests
 cd test
 pylint test_netstat &> /dev/null || errExit "Pylint on tests failed"
 cd ..
-message "3/5: Pylint on tests passed"
+message "Check 3/5: Pylint on tests passed"
 
 # Run mypy on netstat
 mypy netstat &> /dev/null || errExit "Mypy on netstat module failed"
-message "4/5: Mypy on netstat module passed"
+message "Check 4/5: Mypy on netstat module passed"
 
 # Run mypy on tests
 mypy test/test_netstat &> /dev/null || errExit "Mypy on tests failed"
-message "5/5: Mypy on netstat module passed"
+message "Check 5/5: Mypy on netstat module passed"
 
-echo "Success!"
+echo "Success! All checks passed."

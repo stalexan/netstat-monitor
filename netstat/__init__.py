@@ -316,7 +316,7 @@ class Monitor():
         if not self._filters is None:
             socket_filter: GenericFilter
             for socket_filter in self._filters:
-                if socket_filter.filter_out(socket_info):
+                if socket_filter.is_socket_filtered_out(socket_info):
                     return None
 
         return socket_info

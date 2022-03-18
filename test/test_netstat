@@ -119,11 +119,11 @@ class TestFilters(TestCase):
         # Test match
         fil = GenericFilter("test", exe="/usr/sbin/ntpd")
         socket_info1: SocketInfo = SocketInfo._create_from_params(exe="/usr/sbin/ntpd")
-        self.assertTrue(fil.filter_out(socket_info1))
+        self.assertTrue(fil.is_socket_filtered_out(socket_info1))
 
         # Test mismatch
         socket_info2: SocketInfo = SocketInfo._create_from_params(exe="/usr/sbin/ntpd2")
-        self.assertFalse(fil.filter_out(socket_info2))
+        self.assertFalse(fil.is_socket_filtered_out(socket_info2))
 
     def test_filter_cmdline(self) -> None:
         """Test filters on cmdline."""
@@ -132,11 +132,11 @@ class TestFilters(TestCase):
         fil = GenericFilter("test", cmdline="/usr/bin/mpop -Q account1")
         socket_info1: SocketInfo = SocketInfo._create_from_params(
             cmdline="/usr/bin/mpop -Q account1")
-        self.assertTrue(fil.filter_out(socket_info1))
+        self.assertTrue(fil.is_socket_filtered_out(socket_info1))
 
         # Test mismatch
         socket_info2: SocketInfo = SocketInfo._create_from_params(cmdline="/usr/bin/mpop")
-        self.assertFalse(fil.filter_out(socket_info2))
+        self.assertFalse(fil.is_socket_filtered_out(socket_info2))
 
     def test_filter_cmdline_is_re(self) -> None:
         """Test cmdline filters that are regular expressions."""
@@ -146,12 +146,12 @@ class TestFilters(TestCase):
             cmdline_is_re=True)
         socket_info1: SocketInfo = SocketInfo._create_from_params(
             cmdline="/usr/bin/boop -Q account1")
-        self.assertTrue(fil.filter_out(socket_info1))
+        self.assertTrue(fil.is_socket_filtered_out(socket_info1))
 
         # Test mismatch
         socket_info2: SocketInfo = SocketInfo._create_from_params(
             cmdline="/usr/bin/boop -R account1")
-        self.assertFalse(fil.filter_out(socket_info2))
+        self.assertFalse(fil.is_socket_filtered_out(socket_info2))
 
     def test_filter_user(self) -> None:
         """Test filters on user."""
@@ -159,11 +159,11 @@ class TestFilters(TestCase):
         # Test match
         fil = GenericFilter("test", user="root")
         socket_info1: SocketInfo = SocketInfo._create_from_params(user_name="root")
-        self.assertTrue(fil.filter_out(socket_info1))
+        self.assertTrue(fil.is_socket_filtered_out(socket_info1))
 
         # Test mismatch
         socket_info2: SocketInfo = SocketInfo._create_from_params(user_name="www-data")
-        self.assertFalse(fil.filter_out(socket_info2))
+        self.assertFalse(fil.is_socket_filtered_out(socket_info2))
 
 
     def test_filter_local_hosts(self) -> None:
@@ -172,11 +172,11 @@ class TestFilters(TestCase):
         # Test match
         fil = GenericFilter("test", local_hosts="127.0.0.1")
         socket_info1: SocketInfo = SocketInfo._create_from_params(local_host="127.0.0.1")
-        self.assertTrue(fil.filter_out(socket_info1))
+        self.assertTrue(fil.is_socket_filtered_out(socket_info1))
 
         # Test mismatch
         socket_info2: SocketInfo = SocketInfo._create_from_params(local_host="128.0.0.1")
-        self.assertFalse(fil.filter_out(socket_info2))
+        self.assertFalse(fil.is_socket_filtered_out(socket_info2))
 
     def test_filter_local_ports(self) -> None:
         """Test filters on local_ports."""
@@ -184,13 +184,13 @@ class TestFilters(TestCase):
         # Test match
         fil = GenericFilter("test", local_ports="1234,5432,6789")
         socket_info1: SocketInfo = SocketInfo._create_from_params(local_port="1234")
-        self.assertTrue(fil.filter_out(socket_info1))
+        self.assertTrue(fil.is_socket_filtered_out(socket_info1))
         socket_info2: SocketInfo = SocketInfo._create_from_params(local_port="6789")
-        self.assertTrue(fil.filter_out(socket_info2))
+        self.assertTrue(fil.is_socket_filtered_out(socket_info2))
 
         # Test mismatch
         socket_info3: SocketInfo = SocketInfo._create_from_params(local_port="5555")
-        self.assertFalse(fil.filter_out(socket_info3))
+        self.assertFalse(fil.is_socket_filtered_out(socket_info3))
 
     def test_filter_remote_hosts(self) -> None:
         """Test filters on remote_hosts."""
@@ -200,15 +200,15 @@ class TestFilters(TestCase):
             remote_hosts="www.somedomain.net,anotherdomain.com,www.andanother.org")
         socket_info1: SocketInfo = SocketInfo._create_from_params(
             remote_host_name="www.somedomain.net")
-        self.assertTrue(fil.filter_out(socket_info1))
+        self.assertTrue(fil.is_socket_filtered_out(socket_info1))
         socket_info2: SocketInfo = SocketInfo._create_from_params(
             remote_host_name="www.andanother.org")
-        self.assertTrue(fil.filter_out(socket_info2))
+        self.assertTrue(fil.is_socket_filtered_out(socket_info2))
 
         # Test mismatch
         socket_info3: SocketInfo = SocketInfo._create_from_params(
             remote_host_name="www.somedomain2.net")
-        self.assertFalse(fil.filter_out(socket_info3))
+        self.assertFalse(fil.is_socket_filtered_out(socket_info3))
 
     def test_filter_remote_ips(self) -> None:
         """Test filters on remote_ips."""
@@ -216,13 +216,13 @@ class TestFilters(TestCase):
         # Test match
         fil = GenericFilter("test", remote_ips="40.50.60.70,23.24.25.26,77.78.79.0/24")
         socket_info1: SocketInfo = SocketInfo._create_from_params(remote_host="23.24.25.26")
-        self.assertTrue(fil.filter_out(socket_info1))
+        self.assertTrue(fil.is_socket_filtered_out(socket_info1))
         socket_info2: SocketInfo = SocketInfo._create_from_params(remote_host="77.78.79.80")
-        self.assertTrue(fil.filter_out(socket_info2))
+        self.assertTrue(fil.is_socket_filtered_out(socket_info2))
 
         # Test mismatch
         socket_info3: SocketInfo = SocketInfo._create_from_params(remote_host="77.78.80.80")
-        self.assertFalse(fil.filter_out(socket_info3))
+        self.assertFalse(fil.is_socket_filtered_out(socket_info3))
 
     def test_filter_remote_ports(self) -> None:
         """Test filters on remote_ports."""
@@ -230,13 +230,13 @@ class TestFilters(TestCase):
         # Test match
         fil = GenericFilter("test", remote_ports="1234,5432,6789")
         socket_info1: SocketInfo = SocketInfo._create_from_params(remote_port="1234")
-        self.assertTrue(fil.filter_out(socket_info1))
+        self.assertTrue(fil.is_socket_filtered_out(socket_info1))
         socket_info2: SocketInfo = SocketInfo._create_from_params(remote_port="6789")
-        self.assertTrue(fil.filter_out(socket_info2))
+        self.assertTrue(fil.is_socket_filtered_out(socket_info2))
 
         # Test mismatch
         socket_info3: SocketInfo = SocketInfo._create_from_params(remote_port="5555")
-        self.assertFalse(fil.filter_out(socket_info3))
+        self.assertFalse(fil.is_socket_filtered_out(socket_info3))
 
     def test_filter_state(self) -> None:
         """Test filters on state."""
@@ -244,11 +244,11 @@ class TestFilters(TestCase):
         # Test match
         fil = GenericFilter("test", states="SYN_SENT,ESTABLISHED")
         socket_info1: SocketInfo = SocketInfo._create_from_params(state="ESTABLISHED")
-        self.assertTrue(fil.filter_out(socket_info1))
+        self.assertTrue(fil.is_socket_filtered_out(socket_info1))
 
         # Test mismatch
         socket_info2: SocketInfo = SocketInfo._create_from_params(state="CLOSED")
-        self.assertFalse(fil.filter_out(socket_info2))
+        self.assertFalse(fil.is_socket_filtered_out(socket_info2))
 
     def test_multi_element_filter(self) -> None:
         """Test filter on user, exe, and port."""

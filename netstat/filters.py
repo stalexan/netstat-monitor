@@ -98,7 +98,7 @@ class GenericFilter():
         remote_ports: Optional[OptionType] = None, states: Optional[OptionType] = None) -> None:
         """Create the specified filter."""
 
-        # strings. Methods return None if input param is None.
+        # Cast OptionTypes to their expected types.
         self.name = name
         self.pid = GenericFilter._cast_option_value_to_str(pid)
         self.exe = GenericFilter._cast_option_value_to_str(exe)
@@ -185,71 +185,56 @@ class GenericFilter():
 
     def _pid_filters_out(self, socket_info: SocketInfo) -> bool:
         """Return True if socket_info should be filtered out based on pid."""
-        filter_out: bool = True
-        if not self.pid is None:
-            socket_pid: Optional[str] = socket_info.lookup_pid()
-            filter_out = socket_pid == self.pid
-        return filter_out
+        assert not self.pid is None
+        socket_pid: Optional[str] = socket_info.lookup_pid()
+        return socket_pid == self.pid
 
     def _exe_filters_out(self, socket_info: SocketInfo) -> bool:
         """Return True if socket_info should be filtered out based on exe."""
-        filter_out: bool = True
-        if not self.exe is None:
-            socket_exe: Optional[str] = socket_info.lookup_exe()
-            filter_out = socket_exe == self.exe
-        return filter_out
+        assert not self.exe is None
+        socket_exe: Optional[str] = socket_info.lookup_exe()
+        return socket_exe == self.exe
 
     def _cmdline_filters_out(self, socket_info: SocketInfo) -> bool:
         """Return True if socket_info should be filtered out based on cmdline."""
-        filter_out = True
-        if not self.cmdline is None:
-            socket_cmdline: Optional[str] = socket_info.lookup_cmdline()
-            if not socket_cmdline is None:
-                if self.cmdline_re is None:
-                    filter_out = socket_cmdline == self.cmdline
-                else:
-                    filter_out = not self.cmdline_re.match(socket_cmdline) is None
-        return filter_out
+        assert not self.cmdline is None
+        socket_cmdline: Optional[str] = socket_info.lookup_cmdline()
+        if not socket_cmdline is None:
+            if self.cmdline_re is None:
+                return socket_cmdline == self.cmdline
+            else:
+                return not self.cmdline_re.match(socket_cmdline) is None
+        return False
 
     def _user_filters_out(self, socket_info: SocketInfo) -> bool:
         """Return True if socket_info should be filtered out based on user."""
-        filter_out: bool = True
-        if not self.user is None:
-            socket_user: str = socket_info.lookup_user()
-            filter_out = socket_user == self.user
-        return filter_out
+        assert not self.user is None
+        socket_user: str = socket_info.lookup_user()
+        return socket_user == self.user
 
     def _local_host_filters_out(self, socket_info: SocketInfo) -> bool:
         """Return True if socket_info should be filtered out based on local_host."""
-        filter_out: bool = True
-        if not self.local_hosts is None:
-            filter_out = False
-            host_name: str = socket_info.local_host
-            for host in self.local_hosts:
-                if host_name.endswith(host):
-                    filter_out = True
-                    break
-        return filter_out
-
+        assert not self.local_hosts is None
+        host_name: str = socket_info.local_host
+        for host in self.local_hosts:
+            if host_name.endswith(host):
+                return True
+        return False
+  
     def _local_port_filters_out(self, socket_info: SocketInfo) -> bool:
         """Return True if socket_info should be filtered out based on local_port."""
-        filter_out: bool = True
-        if not self.local_ports is None:
-            filter_out = socket_info.local_port in self.local_ports
-        return filter_out
+        assert not self.local_ports is None
+        return socket_info.local_port in self.local_ports
 
     def _remote_host_name_filters_out(self, socket_info: SocketInfo) -> bool:
         """Return True if socket_info should be filtered out based on remote_host_name."""
-        filter_out: bool = True
-        if not self.remote_hosts is None:
-            filter_out = False
-            host_name: Optional[str] = socket_info.lookup_remote_host_name()
-            if not host_name is None:
-                for host in self.remote_hosts:
-                    if host_name.endswith(host):
-                        filter_out = True
-                        break
-        return filter_out
+        assert not self.remote_hosts is None
+        host_name: Optional[str] = socket_info.lookup_remote_host_name()
+        if not host_name is None:
+            for host in self.remote_hosts:
+                if host_name.endswith(host):
+                    return True
+        return False
 
     @staticmethod
     def _ip_in_a_network(ip_str: str, networks: list[str]) -> bool:
@@ -265,43 +250,106 @@ class GenericFilter():
 
     def _remote_ip_filters_out(self, socket_info: SocketInfo) -> bool:
         """Return True if socket_info should be filtered out based on remote_host IP address."""
-        filter_out: bool = True
-        if not self.remote_ips is None:
-            filter_out = self._ip_in_a_network(socket_info.remote_host, self.remote_ips)
-        return filter_out
+        assert not self.remote_ips is None
+        return self._ip_in_a_network(socket_info.remote_host, self.remote_ips)
 
     def _remote_port_filters_out(self, socket_info: SocketInfo) -> bool:
         """Return True if socket_info should be filtered out based on remote_port."""
-        filter_out: bool = True
-        if not self.remote_ports is None:
-            filter_out = socket_info.remote_port in self.remote_ports
-        return filter_out
+        assert not self.remote_ports is None
+        return socket_info.remote_port in self.remote_ports
 
     def _state_filters_out(self, socket_info: SocketInfo) -> bool:
         """Return True if socket_info should be filtered out based on state."""
-        filter_out: bool = True
+        assert not self.states is None
+        return socket_info.state in self.states
+
+    def is_socket_filtered_out(self, socket_info: SocketInfo) -> bool:
+        """Determine if this filter should filter out the given socket.
+
+        Filter parameters are AND'ed together. Each filter parameter that is set
+        is checked.  The first that isn't a match causes the filter not to
+        match, checks stop, and False is returned. If all match, True is
+        returned, and the socket is filtered out.
+
+        Attributes
+        ----------
+        socket_info : SocketInfo
+            The socket to check.
+
+        Returns
+        -------
+        bool
+            Whether the socket should be filtered out and not displayed because
+            of this filter.
+
+        Notes
+        -----
+        A future improvement on this would be to create a FilterParam class that
+        represents a filter parameter, and then subclasses of FilterParam for
+        each of the possible filter parameter types. A GenericFilter would then
+        have a list of FilterParams, one for each of the filter parameters that
+        has been set on the filter. The code below would loop over this list of
+        parameters instead of checking each potential parameter.
+
+        For now, though, this is probably good as is. The code is less generic
+        but probably clearer. Definitely look at doing this if the number of
+        possible filter parameters grows.
+
+        Also, a loop would probably be more efficient than checking each
+        parameter. Performance profiling could say for sure.
+        
+        """
+        # Check pid.
+        if not self.pid is None:
+            if not self._pid_filters_out(socket_info):
+                return False
+
+        # Check exe.
+        if not self.exe is None:
+            if not self._exe_filters_out(socket_info):
+                return False
+
+        # Check cmdline.
+        if not self.cmdline is None:
+            if not self._cmdline_filters_out(socket_info):
+                return False
+
+        # Check user.
+        if not self.user is None:
+            if not self._user_filters_out(socket_info):
+                return False
+
+        # Check local host.
+        if not self.local_hosts is None:
+            if not self._local_host_filters_out(socket_info):
+                return False
+
+        # Check local port.
+        if not self.local_ports is None:
+            if not self._local_port_filters_out(socket_info):
+                return False
+
+        # Checkout remote host.
+        if not self.remote_hosts is None:
+            if not self._remote_host_name_filters_out(socket_info):
+                return False
+
+        # Check remote IP.
+        if not self.remote_ips is None:
+            if not self._remote_ip_filters_out(socket_info):
+                return False
+
+        # Check remote port.
+        if not self.remote_ports is None:
+            if not self._remote_port_filters_out(socket_info):
+                return False
+
+        # Check state.
         if not self.states is None:
-            filter_out = socket_info.state in self.states
-        return filter_out
+            if not self._state_filters_out(socket_info):
+                return False
 
-    def filter_out(self, socket_info: SocketInfo) -> bool:
-        """Return True if socket_info should be filtered out."""
-
-        # Consider each parameter for this filter. All set parameters have to match
-        # a socket for the socket to be filtered out.
-        filter_out: bool = (
-            self._pid_filters_out(socket_info) and
-            self._exe_filters_out(socket_info) and
-            self._cmdline_filters_out(socket_info) and
-            self._user_filters_out(socket_info) and
-            self._local_host_filters_out(socket_info) and
-            self._local_port_filters_out(socket_info) and
-            self._remote_host_name_filters_out(socket_info) and
-            self._remote_ip_filters_out(socket_info) and
-            self._remote_port_filters_out(socket_info) and
-            self._state_filters_out(socket_info))
-
-        return filter_out
+        return True
 
     @staticmethod
     def load_filters(filter_files: Optional[list[str]]) -> "list[GenericFilter]":
@@ -366,10 +414,36 @@ class GenericFilter():
 
         return filters
 
-    # TODO2: A filter should have at least one parameter, or everything is filtered out.
     @staticmethod
     def _read_filter_parameters(parser: configparser.ConfigParser, section: str,
         file_name: str) -> Dict[str, OptionType]:
+        """Read the parameters for a given filter
+
+        Filter definitions are stored in config files. Each config file section
+        defines a filter. For example, the section for a filter named "firefox"
+        might be:
+
+            [firefox]
+            exe: /usr/lib/firefox/firefox
+            user: alice 
+            remote_ports: 53, 80, 443, 8080
+
+        Attributes
+        ----------
+        parser : configparser.ConfigParser
+            The configuration file parser that was used to load the current filter file.
+        section : str
+            The name of the configuration section to read.
+        file_name: str
+            The name of the file that's being read.
+
+        Returns
+        -------
+        Dict[str, OptionType]:
+            The filter parameters, stored as a dictionary with filter parameter
+            name as the index and filter parameter value as the value.
+
+        """
         # Reader parameters for this filter
         filter_params: Dict[str, OptionType] = {}
         items: list[Tuple[str, str]] = parser.items(section)
