@@ -20,7 +20,7 @@ Or, to create an installable package (tarball):
 
     $ sudo apt-get install python3-build
     $ cd /tmp
-    $ git clone git@github.com:stalexan/netstat-monitor.git     
+    $ git clone https://github.com/stalexan/netstat-monitor.git
     $ cd netstat-monitor
     $ python3 -m build
 
@@ -34,13 +34,9 @@ This installs to ~/.local/bin. To run:
 
     $ ~/.local/bin/netstat-monitor
 
-Or to instead install to /usr/local/bin run `pip install` as root:
+Or to instead install to `/usr/local/bin` run `pip install` as root:
 
     $ sudo pip install netstat-monitor-1.1.4.tar.gz
-
-And then to run:
-
-    $ netstat-monitor
 
 ## Running
 
