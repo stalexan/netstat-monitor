@@ -6,26 +6,41 @@ Netstat-monitor is a command line tool for monitoring network connections. Its o
 
 ## Installation
 
-Netstat-monitor has been tested on Debian based distros based on the Linux 3.2 kernel; 
-specifically: Ubuntu 12.04 and Debian 7.0 (Wheezy).
+Netstat-monitor has been tested on Debian 11 Bullseye, which uses the Linux 5.10 kernel, but should work on other distros that have the same format for the socket files in `/proc/net` (`tcp`, `tcp6`, `udp`, and `udp6`.) Netstat-monitor does a quick preliminary check on start-up to see if those files have the expected header line. Previous versions of netstat-monitor were tested on Debian 7 (Wheezy) and Ubuntu 12.04, which were based on the Linux 3.2 kernel.
 
-To get the latest version:
-
-    $ wget -O /tmp/netstat-monitor.tar.gz https://github.com/stalexan/netstat-monitor/tarball/master
-
-To install using pip:
-
-    $ pip install /tmp/netstat-monitor.tar.gz
-
-Or to run directly without installing, on a Debian based distro:
+To clone the repo from GitHub and run netstat-monitor directly, on a Debian based distro:
 
     $ sudo apt-get install python3-netaddr
     $ cd /tmp
-    $ tar xvzf netstat-monitor.tar.gz
-    $ cd netstat-monitor-*
+    $ git clone https://github.com/stalexan/netstat-monitor.git
+    $ cd netstat-monitor
     $ ./netstat-monitor
 
-The tarballs are also available here: https://www.alexan.org/netstat-monitor
+Or, to create an installable package (tarball):
+
+    $ sudo apt-get install python3-build
+    $ cd /tmp
+    $ git clone git@github.com:stalexan/netstat-monitor.git     
+    $ cd netstat-monitor
+    $ python3 -m build
+
+This creates the tarball `netstat-monitor-1.1.4.tar.gz` in `./dist`. To install:
+
+    $ sudo apt-get install python3-pip
+    $ cd ./dist
+    $ pip install netstat-monitor-1.1.4.tar.gz
+
+This installs to ~/.local/bin. To run:
+
+    $ ~/.local/bin/netstat-monitor
+
+Or to instead install to /usr/local/bin run `pip install` as root:
+
+    $ sudo pip install netstat-monitor-1.1.4.tar.gz
+
+And then to run:
+
+    $ netstat-monitor
 
 ## Running
 
