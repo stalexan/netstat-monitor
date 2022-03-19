@@ -45,7 +45,7 @@ from .filters import GenericFilter
 from .shared import MonitorException, OptionType
 from .sockets import SocketInfo
 
-__version__ = "v1.1.3"
+__version__ = "v1.1.4"
 
 DEFAULT_MONITOR_INTERVAL = 1     # Number of seconds between each netstat.
 MIN_MONITOR_INTERVAL =     0.001 # Minimum value for monitor interval.
@@ -59,7 +59,7 @@ PROC_TCP6 = "/proc/net/tcp6"
 PROC_UDP = "/proc/net/udp"
 PROC_UDP6 = "/proc/net/udp6"
 
-TESTED_KERNEL = "3.17.2"
+TESTED_KERNEL = "5.10"
 
 def main() -> int:
     """Monitor network connections."""
