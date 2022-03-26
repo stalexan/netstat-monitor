@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# "Checks all" by running: tests, pylint, and mypy.
+
 function message() {
     printf "$1\n"
 }
@@ -24,9 +26,7 @@ cd ..
 message "Check 1/5: Tests passed"
 
 # Run pylint on netstat
-cd netstat
-pylint . &> /dev/null || errExit "Pylint on netstat module failed"
-cd ..
+pylint netstat &> /dev/null || errExit "Pylint on netstat module failed"
 message "Check 2/5: Pylint on netstat module passed"
 
 # Run pylint on tests
