@@ -6,7 +6,7 @@ Netstat-monitor is a command line tool for monitoring network connections. Its o
 
 ## Installation
 
-Netstat-monitor has been tested on Debian 11 Bullseye, which uses the Linux 5.10 kernel, but should work on other distros that have the same format for the socket files in `/proc/net` (`tcp`, `tcp6`, `udp`, and `udp6`.) Netstat-monitor does a quick preliminary check on start-up to see if those files have the expected header line. Previous versions of netstat-monitor were tested on Debian 7 (Wheezy) and Ubuntu 12.04, which were based on the Linux 3.2 kernel.
+Netstat-monitor has been tested on Debian 11 Bullseye, which uses Python 3.9 and the Linux 5.10 kernel. It should work on other distros that have the same format for the socket files in `/proc/net` (`tcp`, `tcp6`, `udp`, and `udp6`.) Netstat-monitor does a quick preliminary check on start-up to see if those files have the expected header line. Previous versions of netstat-monitor were tested on Debian 7 (Wheezy) and Ubuntu 12.04, which were based on the Linux 3.2 kernel.
 
 To clone the repo from GitHub and run netstat-monitor directly, on a Debian based distro:
 
